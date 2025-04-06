@@ -1,0 +1,28 @@
+name: PCGSettings
+numberOfLevels: 5
+numberOfRooms: 10
+roomSizeRange: 
+  min: 5
+  max: 15
+tileTypes: 
+  - Floor
+  - Wall
+enemyTypes: 
+  - Goblin
+  - Skeleton
+  - Zombie
+playerStartPosition: 
+  x: 0
+  y: 0
+decoratorTypes: 
+  - Tree
+  - Rock
+  - Bush
+startLevel: 1
+endLevel: 5
+gameStartTrigger: 
+  enabled: true
+  triggerType: "OnStart"
+gameEndTrigger: 
+  enabled: true
+  triggerType: "OnEnd"

@@ -1,0 +1,2 @@
+// This prefab represents the player character that can be spawned in the levels. 
+// It is intentionally left blank as Unity handles prefab serialization.
