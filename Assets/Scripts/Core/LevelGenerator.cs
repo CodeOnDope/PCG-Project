@@ -2,157 +2,204 @@ using UnityEngine;
 using System.Collections.Generic;
 
 public class LevelGenerator : MonoBehaviour
-{
-    [Header("Level Settings")]
-    public int numberOfLevels = 1;
-    public int numberOfRooms = 10; // Add this
-    public int numberOfEnemies = 20; // Add this
-    public int numberOfDecorators = 15; // Add this
-    public int startLevel = 0; // Add this
-    public int endLevel = 1; // Add this
-    public int minRoomsPerLevel = 5;
-    public int maxRoomsPerLevel = 10;
-    public int minRoomSize = 5;
-    public int maxRoomSize = 10;
+{/*
+    [Header("Level Dimensions")]
+    public int levelWidth = 100;
+    public int levelHeight = 100;
 
-    [Header("Tile Settings")]
+    [Header("BSP Settings")]
+    public int minRoomSize = 8;
+    public int maxIterations = 5;
+
+    [Header("Tile Prefabs")]
     public GameObject floorTilePrefab;
     public GameObject wallTilePrefab;
 
-    [Header("Enemy Settings")]
-    public GameObject enemyPrefab;
-    public int minEnemiesPerRoom = 1;
-    public int maxEnemiesPerRoom = 3;
-
-    [Header("Player Settings")]
-    public GameObject playerPrefab;
-
-    [Header("Decorator Settings")]
-    public GameObject[] decoratorPrefabs;
-
-    [Header("Triggers")]
-    public GameObject startTriggerPrefab;
-    public GameObject endTriggerPrefab;
-
-    private List<Room> rooms;
+    private TileType[,] grid; // 2D grid representing the level
+    private List<Room> rooms; // List of generated rooms
+    private System.Random random; // Random number generator
 
     void Start()
     {
-        GenerateLevels();
+        GenerateLevel();
     }
 
-    public void GenerateLevels()
+    /// <summary>
+    /// Main method to generate the level.
+    /// </summary>
+    public void GenerateLevel()
     {
-        for (int i = 0; i < numberOfLevels; i++)
+        InitializeGrid();
+        List<RectInt> partitions = RunBSP();
+        rooms = CreateRooms(partitions);
+        ConnectRooms(rooms);
+        ApplyGridToTiles();
+    }
+
+    /// <summary>
+    /// Initializes the grid with walls.
+    /// </summary>
+    private void InitializeGrid()
+    {
+        grid = new TileType[levelWidth, levelHeight];
+        for (int x = 0; x < levelWidth; x++)
         {
-            GenerateLevel(i);
-        }
-    }
-
-    private void GenerateLevel(int levelIndex)
-    {
-        rooms = new List<Room>();
-        int roomCount = Random.Range(minRoomsPerLevel, maxRoomsPerLevel + 1);
-
-        for (int i = 0; i < roomCount; i++)
-        {
-            Room room = GenerateRoom();
-            rooms.Add(room);
-            PlaceRoom(room);
-            SpawnEnemies(room);
-            PlaceDecorators(room);
-        }
-
-        PlaceStartAndEndTriggers(levelIndex);
-    }
-
-    private Room GenerateRoom()
-    {
-        int width = Random.Range(minRoomSize, maxRoomSize + 1);
-        int height = Random.Range(minRoomSize, maxRoomSize + 1);
-        Vector2 position = new Vector2(Random.Range(0, 100), Random.Range(0, 100)); // Example position logic
-
-        return new Room(position, width, height);
-    }
-
-    private void PlaceRoom(Room room)
-    {
-        for (int x = 0; x < room.Width; x++)
-        {
-            for (int y = 0; y < room.Height; y++)
+            for (int y = 0; y < levelHeight; y++)
             {
-                Vector3 tilePosition = new Vector3(room.Position.x + x, room.Position.y + y, 0);
-                Instantiate(floorTilePrefab, tilePosition, Quaternion.identity);
+                grid[x, y] = TileType.Wall; // Start with walls
+            }
+        }
+        random = new System.Random();
+    }
+
+    /// <summary>
+    /// Runs the Binary Space Partitioning (BSP) algorithm to divide the level into partitions.
+    /// </summary>
+    private List<RectInt> RunBSP()
+    {
+        List<RectInt> partitions = new List<RectInt>();
+        Queue<RectInt> queue = new Queue<RectInt>();
+        queue.Enqueue(new RectInt(0, 0, levelWidth, levelHeight));
+
+        for (int i = 0; i < maxIterations; i++)
+        {
+            if (queue.Count == 0) break;
+
+            RectInt current = queue.Dequeue();
+            if (current.width < minRoomSize * 2 || current.height < minRoomSize * 2)
+            {
+                partitions.Add(current);
+                continue;
+            }
+
+            bool splitHorizontally = random.Next(0, 2) == 0;
+            if (current.width > current.height) splitHorizontally = false;
+            if (current.height > current.width) splitHorizontally = true;
+
+            if (splitHorizontally)
+            {
+                int splitY = random.Next(minRoomSize, current.height - minRoomSize);
+                queue.Enqueue(new RectInt(current.x, current.y, current.width, splitY));
+                queue.Enqueue(new RectInt(current.x, current.y + splitY, current.width, current.height - splitY));
+            }
+            else
+            {
+                int splitX = random.Next(minRoomSize, current.width - minRoomSize);
+                queue.Enqueue(new RectInt(current.x, current.y, splitX, current.height));
+                queue.Enqueue(new RectInt(current.x + splitX, current.y, current.width - splitX, current.height));
             }
         }
 
-        // Place walls around the room
-        for (int x = -1; x <= room.Width; x++)
+        partitions.AddRange(queue);
+        return partitions;
+    }
+
+    /// <summary>
+    /// Creates rooms within the BSP partitions.
+    /// </summary>
+    private List<Room> CreateRooms(List<RectInt> partitions)
+    {
+        List<Room> rooms = new List<Room>();
+        foreach (RectInt partition in partitions)
         {
-            Instantiate(wallTilePrefab, new Vector3(room.Position.x + x, room.Position.y - 1, 0), Quaternion.identity);
-            Instantiate(wallTilePrefab, new Vector3(room.Position.x + x, room.Position.y + room.Height, 0), Quaternion.identity);
+            int roomWidth = random.Next(minRoomSize, partition.width);
+            int roomHeight = random.Next(minRoomSize, partition.height);
+            int roomX = partition.x + random.Next(0, partition.width - roomWidth);
+            int roomY = partition.y + random.Next(0, partition.height - roomHeight);
+
+            Room room = new Room(new Vector2Int(roomX, roomY), roomWidth, roomHeight);
+            rooms.Add(room);
+
+            // Mark the room area as floor in the grid
+            for (int x = room.Position.x; x < room.Position.x + room.Width; x++)
+            {
+                for (int y = room.Position.y; y < room.Position.y + room.Height; y++)
+                {
+                    grid[x, y] = TileType.Floor;
+                }
+            }
         }
-        for (int y = 0; y <= room.Height; y++)
+        return rooms;
+    }
+
+    /// <summary>
+    /// Connects rooms with corridors.
+    /// </summary>
+    private void ConnectRooms(List<Room> rooms)
+    {
+        for (int i = 0; i < rooms.Count - 1; i++)
         {
-            Instantiate(wallTilePrefab, new Vector3(room.Position.x - 1, room.Position.y + y, 0), Quaternion.identity);
-            Instantiate(wallTilePrefab, new Vector3(room.Position.x + room.Width, room.Position.y + y, 0), Quaternion.identity);
+            Room roomA = rooms[i];
+            Room roomB = rooms[i + 1];
+
+            Vector2Int pointA = new Vector2Int(random.Next(roomA.Position.x, roomA.Position.x + roomA.Width), random.Next(roomA.Position.y, roomA.Position.y + roomA.Height));
+            Vector2Int pointB = new Vector2Int(random.Next(roomB.Position.x, roomB.Position.x + roomB.Width), random.Next(roomB.Position.y, roomB.Position.y + roomB.Height));
+
+            CreateCorridor(pointA, pointB);
         }
     }
 
-    private void SpawnEnemies(Room room)
+    /// <summary>
+    /// Creates a corridor between two points.
+    /// </summary>
+    private void CreateCorridor(Vector2Int pointA, Vector2Int pointB)
     {
-        int enemyCount = Random.Range(minEnemiesPerRoom, maxEnemiesPerRoom + 1);
-        for (int i = 0; i < enemyCount; i++)
+        Vector2Int current = pointA;
+
+        while (current.x != pointB.x)
         {
-            Vector2 enemyPosition = new Vector2(room.Position.x + Random.Range(1, room.Width - 1), room.Position.y + Random.Range(1, room.Height - 1));
-            Instantiate(enemyPrefab, enemyPosition, Quaternion.identity);
+            grid[current.x, current.y] = TileType.Floor;
+            current.x += current.x < pointB.x ? 1 : -1;
+        }
+
+        while (current.y != pointB.y)
+        {
+            grid[current.x, current.y] = TileType.Floor;
+            current.y += current.y < pointB.y ? 1 : -1;
         }
     }
 
-    private void PlaceDecorators(Room room)
+    /// <summary>
+    /// Instantiates tiles based on the grid.
+    /// </summary>
+    private void ApplyGridToTiles()
     {
-        foreach (var decorator in decoratorPrefabs)
+        for (int x = 0; x < levelWidth; x++)
         {
-            Vector2 decoratorPosition = new Vector2(room.Position.x + Random.Range(1, room.Width - 1), room.Position.y + Random.Range(1, room.Height - 1));
-            Instantiate(decorator, decoratorPosition, Quaternion.identity);
-        }
-    }
-
-    private void PlaceStartAndEndTriggers(int levelIndex)
-    {
-        Instantiate(startTriggerPrefab, new Vector3(0, 0, 0), Quaternion.identity); // Example position for start trigger
-        Instantiate(endTriggerPrefab, new Vector3(99, 99, 0), Quaternion.identity); // Example position for end trigger
-    }
-
-    public void ClearLevels() // Add this method
-    {
-        // Logic to clear all generated levels
-        Debug.Log("Levels cleared.");
-    }
-
-    public void ClearLevel()
-    {
-        // Add logic to clear the generated level
-        Debug.Log("Clearing the level...");
-        // Example: Destroy all child objects of this GameObject
-        foreach (Transform child in transform)
-        {
-            DestroyImmediate(child.gameObject);
+            for (int y = 0; y < levelHeight; y++)
+            {
+                Vector3 position = new Vector3(x, y, 0);
+                if (grid[x, y] == TileType.Floor)
+                {
+                    Instantiate(floorTilePrefab, position, Quaternion.identity);
+                }
+                else
+                {
+                    Instantiate(wallTilePrefab, position, Quaternion.identity);
+                }
+            }
         }
     }
 }
 
-[System.Serializable]
+/// <summary>
+/// Enum to represent tile types.
+/// </summary>
+public enum TileType { Wall, Floor }
+
+/// <summary>
+/// Class to represent a room.
+/// </summary>
 public class Room
 {
-    public Vector2 Position;
-    public int Width;
-    public int Height;
+    public Vector2Int Position { get; private set; }
+    public int Width { get; private set; }
+    public int Height { get; private set; }
 
-    public Room(Vector2 position, int width, int height)
+    public Room(Vector2Int position, int width, int height)
     {
         Position = position;
         Width = width;
         Height = height;
-    }
+    }*/
 }

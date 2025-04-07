@@ -319,11 +319,62 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    void Shoot() { /* ... Paste working Shoot logic here ... */ } // Omitted - Use previous corrected Shoot logic
+    void Shoot()
+    {
+        if (bulletPrefab == null || playerTarget == null || firePoint == null) return;
 
-    public void TakeDamage(float amount) { /* ... Paste working TakeDamage logic here ... */ } // Omitted - Use previous corrected TakeDamage logic
+        // Calculate the direction from the firePoint to the player
+        Vector2 directionToPlayer = (playerTarget.position - firePoint.position).normalized;
 
-    void Die() { /* ... Paste working Die logic here ... */ } // Omitted - Use previous corrected Die logic
+        // Instantiate the bullet at the firePoint's position
+        GameObject bullet = Instantiate(bulletPrefab, firePoint.position, Quaternion.identity);
+
+        // Add force to the bullet to make it move toward the player
+        Rigidbody2D bulletRb = bullet.GetComponent<Rigidbody2D>();
+        if (bulletRb != null)
+        {
+            bulletRb.linearVelocity = directionToPlayer * 10f; // Adjust the speed multiplier as needed
+        }
+    }
+
+    public void TakeDamage(float amount)
+    {
+        // Reduce health by the damage amount
+        currentHealth -= amount;
+
+        // Check if health is zero or below
+        if (currentHealth <= 0)
+        {
+            Die();
+        }
+    }
+
+    void Die()
+    {
+        // Handle enemy death (e.g., play animation, drop loot, etc.)
+        Debug.Log($"{gameObject.name} has died.");
+
+        // Destroy the enemy GameObject
+        Destroy(gameObject);
+    }
+
+    // Example: Detect collision with player's bullet
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        // Check if the collision is with a player's bullet
+        if (collision.CompareTag("PlayerBullet"))
+        {
+            // Get the damage value from the bullet
+            Bullet bullet = collision.GetComponent<Bullet>();
+            if (bullet != null)
+            {
+                TakeDamage(bullet.damage);
+            }
+
+            // Destroy the bullet after it hits the enemy
+            Destroy(collision.gameObject);
+        }
+    }
 
     // --- Helpers ---
 

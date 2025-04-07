@@ -240,7 +240,7 @@ public class PlayerController : MonoBehaviour
         this.enabled = false;
         if(rb != null) rb.linearVelocity = Vector2.zero;
         // Add death effects, game over logic etc.
-        // gameObject.SetActive(false);
+         gameObject.SetActive(false);
     }
 
     public void Heal(int amount)

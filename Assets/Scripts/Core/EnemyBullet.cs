@@ -1,5 +1,5 @@
 using UnityEngine;
-public class Bullet : MonoBehaviour {
+public class EnemyBullet : MonoBehaviour {
     public float speed = 10f;
     public float lifetime = 3f;
     public int damage = 10; // Damage this bullet deals
@@ -11,19 +11,19 @@ public class Bullet : MonoBehaviour {
 
     void OnTriggerEnter2D(Collider2D other) {
         // Check if the bullet hit the player
-       // PlayerController playerController = other.GetComponent<PlayerController>();
-       // if (playerController != null) {
-       //     playerController.TakeDamage(damage); // Call the TakeDamage method in PlayerController
-       //     Destroy(gameObject); // Destroy the bullet on hit
-          //  return;
+        PlayerController playerController = other.GetComponent<PlayerController>();
+        if (playerController != null) {
+           playerController.TakeDamage(damage); // Call the TakeDamage method in PlayerController
+           Destroy(gameObject); // Destroy the bullet on hit
+            return;
        // }
 
         // Check if the bullet hit an enemy
-        EnemyAI enemyAI = other.GetComponent<EnemyAI>();
-        if (enemyAI != null) {
-            enemyAI.TakeDamage(damage); // Call the TakeDamage method in EnemyAI
-            Destroy(gameObject); // Destroy the bullet on hit
-            return;
+       // EnemyAI enemyAI = other.GetComponent<EnemyAI>();
+      //  if (enemyAI != null) {
+         //   enemyAI.TakeDamage(damage); // Call the TakeDamage method in EnemyAI
+         //   Destroy(gameObject); // Destroy the bullet on hit
+           // return;
         }
 
         // Optionally, check if the bullet hit a wall or obstacle

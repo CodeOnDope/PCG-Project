@@ -666,7 +666,7 @@ MonoBehaviour:
   wallTilemap: {fileID: 1521400880}
   floorTile: {fileID: 11400000, guid: 3f5b5b050a99feb4e98a954f647d17e6, type: 2}
   wallTile: {fileID: 11400000, guid: fd1a932b63d942046be33904a6e02fc0, type: 2}
-  seed: 1332533406
+  seed: 1263470710
   useRandomSeed: 1
   playerPrefab: {fileID: 3548798236488958899, guid: 233e123314ae4e948bcc465afc76dfb9, type: 3}
   enemyPrefab: {fileID: 7773039407867173279, guid: a722c0378e102014a9dfbe64ebc335bf, type: 3}

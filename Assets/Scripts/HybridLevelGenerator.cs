@@ -30,11 +30,21 @@ public class HybridLevelGenerator : MonoBehaviour
     public int seed = 0; // Use 0 for random seed each time, or set value for specific layout
     public bool useRandomSeed = true;
 
+    [Header("Entities & Decorations")]
+    public GameObject playerPrefab; // Assign the player prefab in the Inspector
+    public GameObject enemyPrefab; // Assign the enemy prefab in the Inspector
+    public GameObject decorationPrefab; // Assign the decoration prefab in the Inspector
+    public int enemiesPerRoom = 2; // Number of enemies per room
+    public int decorationsPerRoom = 3; // Number of decorations per room
+
     // Internal Data
     private TileType[,] grid;
     private List<RectInt> bspLeaves;
     private List<RectInt> rooms;
     private System.Random pseudoRandom;
+
+    // Track dynamically instantiated objects
+    private List<GameObject> spawnedObjects = new List<GameObject>();
 
     // --- Public Methods ---
 
@@ -54,12 +64,26 @@ public class HybridLevelGenerator : MonoBehaviour
     [ContextMenu("Clear Level")]
     public void ClearLevel()
     {
+        // Clear tilemaps
         if (groundTilemap != null) groundTilemap.ClearAllTiles();
         if (wallTilemap != null) wallTilemap.ClearAllTiles();
-        // Clear internal data if necessary
+
+        // Destroy all dynamically spawned objects
+        foreach (GameObject obj in spawnedObjects)
+        {
+            if (obj != null)
+            {
+                Destroy(obj);
+            }
+        }
+        spawnedObjects.Clear(); // Clear the list after destroying objects
+
+        // Clear internal data
         grid = null;
         bspLeaves = null;
-        rooms = null;
+        rooms = new List<RectInt>(); // Ensure rooms list is reset
+
+        Debug.Log("Level cleared.");
     }
 
 
@@ -183,6 +207,8 @@ public class HybridLevelGenerator : MonoBehaviour
 
     private void CreateRoomsInLeaves()
     {
+        bool isFirstRoom = true; // Track the first room for player placement
+
         foreach (RectInt leaf in bspLeaves)
         {
             // Ensure minimum size for the leaf itself before trying to place a room
@@ -193,7 +219,6 @@ public class HybridLevelGenerator : MonoBehaviour
             int maxRoomHeight = leaf.height - (int)(2 * roomPadding);
 
             if (maxRoomWidth < minRoomSize || maxRoomHeight < minRoomSize) continue; // Not enough space even with padding
-
 
             // Determine actual room size (randomly within bounds)
             int roomWidth = pseudoRandom.Next(minRoomSize, maxRoomWidth + 1);
@@ -206,6 +231,46 @@ public class HybridLevelGenerator : MonoBehaviour
             RectInt roomRect = new RectInt(roomX, roomY, roomWidth, roomHeight);
             rooms.Add(roomRect);
             CarveRectangle(roomRect, TileType.Floor); // Carve the room area
+
+            // Place the player in the first room
+            if (isFirstRoom && playerPrefab != null)
+            {
+                Vector3 playerPosition = new Vector3(roomRect.center.x, roomRect.center.y, 0);
+                GameObject player = Instantiate(playerPrefab, playerPosition, Quaternion.identity);
+                spawnedObjects.Add(player);
+                Debug.Log($"Player added to spawnedObjects. Total: {spawnedObjects.Count}");
+                isFirstRoom = false;
+            }
+
+            // Place enemies in the room
+            if (enemyPrefab != null)
+            {
+                for (int i = 0; i < enemiesPerRoom; i++)
+                {
+                    Vector3 enemyPosition = new Vector3(
+                        pseudoRandom.Next(roomRect.xMin, roomRect.xMax),
+                        pseudoRandom.Next(roomRect.yMin, roomRect.yMax),
+                        0
+                    );
+                    GameObject enemy = Instantiate(enemyPrefab, enemyPosition, Quaternion.identity);
+                    spawnedObjects.Add(enemy); // Track the enemy object
+                }
+            }
+
+            // Place decorations in the room
+            if (decorationPrefab != null)
+            {
+                for (int i = 0; i < decorationsPerRoom; i++)
+                {
+                    Vector3 decorationPosition = new Vector3(
+                        pseudoRandom.Next(roomRect.xMin, roomRect.xMax),
+                        pseudoRandom.Next(roomRect.yMin, roomRect.yMax),
+                        0
+                    );
+                    GameObject decoration = Instantiate(decorationPrefab, decorationPosition, Quaternion.identity);
+                    spawnedObjects.Add(decoration); // Track the decoration object
+                }
+            }
         }
     }
 
@@ -437,9 +502,7 @@ public class HybridLevelGenerator : MonoBehaviour
 }
 
 // --- Optional Helper Class for full BSP Tree (More Complex Corridor Logic) ---
-/*
-public class BSPNode {
-    public RectInt Partition;
+/*public class BSPNode {
     public BSPNode LeftChild;
     public BSPNode RightChild;
     public RectInt? Room; // Room within this node (only if it's a leaf)
@@ -452,5 +515,4 @@ public class BSPNode {
         RightChild = null;
         Room = null;
     }
-}
-*/
+}*/
