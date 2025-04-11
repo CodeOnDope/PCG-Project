@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: LevelTheme
+  m_EditorClassIdentifier: Assembly-CSharp::LevelTheme
+  themeName: Outdoor
+  floorTile: {fileID: 11400000, guid: 3f5b5b050a99feb4e98a954f647d17e6, type: 2}
+  wallTile: {fileID: 11400000, guid: fd1a932b63d942046be33904a6e02fc0, type: 2}
+  decorationTiles:
+  - {fileID: 11400000, guid: 1c562d94df492cd43b04d3268982ad97, type: 2}
+  enemyPrefabs:
+  - {fileID: 7773039407867173279, guid: a722c0378e102014a9dfbe64ebc335bf, type: 3}
+  specialObjectPrefabs:
+  - {fileID: 5787062411891570421, guid: 4e90315ad716e504a80a4fbd02bd82dc, type: 3}
+  ambientColor: {r: 1, g: 0.5711619, b: 0.3226415, a: 1}
+  decorationDensity: 0.1
+  enemyDensity: 0.05

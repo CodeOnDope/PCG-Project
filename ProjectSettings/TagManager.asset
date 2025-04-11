@@ -7,6 +7,12 @@ TagManager:
   - Bullet
   - Enemy
   - PlayerBullet
+  - Decoration
+  - Boss
+  - Treasure
+  - Shop
+  - Door
+  - Exit
   layers:
   - Default
   - TransparentFX
