@@ -64,24 +64,43 @@ public class HybridLevelGenerator : MonoBehaviour
     [ContextMenu("Clear Level")]
     public void ClearLevel()
     {
-        // Clear tilemaps
+        Debug.Log("Clearing level...");
+        // Clear tilemaps first
         if (groundTilemap != null) groundTilemap.ClearAllTiles();
         if (wallTilemap != null) wallTilemap.ClearAllTiles();
 
-        // Destroy all dynamically spawned objects
-        foreach (GameObject obj in spawnedObjects)
+        // --- CORRECTED OBJECT DESTRUCTION ---
+        // Destroy all dynamically spawned objects tracked in the list
+        // Iterate backwards is generally safer when removing/destroying items from a list during iteration,
+        // although Clear() is called after the loop here.
+        for (int i = spawnedObjects.Count - 1; i >= 0; i--)
         {
-            if (obj != null)
+            GameObject obj = spawnedObjects[i];
+            if (obj != null) // Check if the object still exists (it might have been destroyed by other means)
             {
-                Destroy(obj);
+                // Use DestroyImmediate() when running in the Unity Editor (e.g., called via ContextMenu)
+                // Use Destroy() when running in Play mode
+                if (Application.isPlaying)
+                {
+                    Destroy(obj);
+                }
+                else
+                {
+                    // IMPORTANT: Use DestroyImmediate for editor cleanup actions
+                    // The 'true' argument allows destroying assets as well, but is usually not needed here.
+                    DestroyImmediate(obj);
+                }
             }
         }
-        spawnedObjects.Clear(); // Clear the list after destroying objects
+        // Clear the tracking list *after* attempting to destroy the objects it referenced
+        spawnedObjects.Clear();
+        // --- END CORRECTION ---
 
-        // Clear internal data
-        grid = null;
-        bspLeaves = null;
-        rooms = new List<RectInt>(); // Ensure rooms list is reset
+        // Clear internal grid/room data structures
+        grid = null;       // Release grid memory
+        bspLeaves = null;  // Release leaves list
+        // Ensure rooms list exists but is empty for the next generation
+        if (rooms != null) rooms.Clear(); else rooms = new List<RectInt>();
 
         Debug.Log("Level cleared.");
     }
