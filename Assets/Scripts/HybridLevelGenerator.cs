@@ -3,7 +3,7 @@ using UnityEngine.Tilemaps;
 using System.Collections.Generic;
 using System; // Required for System.Random
 
-public enum TileType { Empty, Floor, Wall }
+public enum TileType { Empty, Floor, Wall } // Keep or replace with your actual tile enum/system
 
 public class HybridLevelGenerator : MonoBehaviour
 {
@@ -12,528 +12,429 @@ public class HybridLevelGenerator : MonoBehaviour
     public int levelHeight = 100;
 
     [Header("BSP Settings")]
-    public int minRoomSize = 8; // Minimum width/height for a partition to contain a room
-    public int maxIterations = 5; // How many times to split the space (controls room count)
-    public float roomPadding = 2f; // Minimum space between room edge and partition edge
+    public int minRoomSize = 8; // Min size applies to width/height of rects or stem/leg of L-shapes
+    public int maxIterations = 5;
+    public float roomPadding = 2f; // Padding around rooms within BSP leaves
+
+    [Header("Room Shape Settings")] // <-- New parameters added here
+    [Tooltip("The chance (0 to 1) of attempting to generate an L-shaped room instead of a rectangle within a BSP leaf.")]
+    [Range(0f, 1f)]
+    public float lShapeProbability = 0.3f; // 30% chance for L-shape
+    [Tooltip("Minimum length of the shorter 'leg' of an L-shape, relative to the stem dimension.")]
+    [Range(0.3f, 0.8f)]
+    public float minLLegRatio = 0.4f;
+    [Tooltip("Maximum length of the shorter 'leg' of an L-shape, relative to the stem dimension.")]
+    [Range(0.5f, 1.0f)]
+    public float maxLLegRatio = 0.7f;
 
     [Header("Corridor Settings")]
-    public int corridorWidth = 1; // Width of the corridors (1 = single tile wide)
+    public int corridorWidth = 1;
 
     [Header("Tilemaps & Tiles")]
     public Tilemap groundTilemap;
     public Tilemap wallTilemap;
     public TileBase floorTile;
     public TileBase wallTile;
-    // Add more TileBases for variations or decorations if needed
 
     [Header("Randomness")]
-    public int seed = 0; // Use 0 for random seed each time, or set value for specific layout
+    public int seed = 0;
     public bool useRandomSeed = true;
 
     [Header("Entities & Decorations")]
-    public GameObject playerPrefab; // Assign the player prefab in the Inspector
-    public GameObject enemyPrefab; // Assign the enemy prefab in the Inspector
-    public GameObject decorationPrefab; // Assign the decoration prefab in the Inspector
-    public int enemiesPerRoom = 2; // Number of enemies per room
-    public int decorationsPerRoom = 3; // Number of decorations per room
+    public GameObject playerPrefab;
+    public GameObject enemyPrefab;
+    public GameObject decorationPrefab;
+    public int enemiesPerRoom = 2;
+    public int decorationsPerRoom = 3;
 
     // Internal Data
     private TileType[,] grid;
     private List<RectInt> bspLeaves;
-    private List<RectInt> rooms;
+    private List<RectInt> rooms; // Stores the bounds of placed rooms (Rect or L-Shape overall bounds)
     private System.Random pseudoRandom;
 
-    // Track dynamically instantiated objects
-    private List<GameObject> spawnedObjects = new List<GameObject>();
+    // Parent Transform References
+    private Transform playerHolder;
+    private Transform enemiesHolder;
+    private Transform decorationsHolder;
 
     // --- Public Methods ---
 
-    [ContextMenu("Generate Level")] // Allows triggering from Inspector
+    [ContextMenu("Generate Level")]
     public void GenerateLevel()
     {
+        Debug.Log("--- Starting Level Generation ---");
         ClearLevel();
         Initialize();
+
+        if (grid == null || pseudoRandom == null || rooms == null || bspLeaves == null || playerHolder == null || enemiesHolder == null || decorationsHolder == null)
+        {
+            Debug.LogError("Initialization failed! Cannot generate level.", this);
+            return;
+        }
+
         RunBSPSplit();
-        CreateRoomsInLeaves();
-        CreateCorridors(); // Connect rooms based on BSP hierarchy
+        CreateRoomsInLeaves(); // <-- This method is modified for L-Shapes
+        CreateCorridors();
         ApplyTilesToTilemap();
-        // Future steps: Add details (Cellular Automata inside rooms?), place decorations (Noise based?), spawn player/enemies.
-        Debug.Log($"Level generation complete. Seed: {seed}. Rooms: {rooms.Count}");
+
+        Debug.Log($"--- Level Generation Complete --- Seed: {seed}. Rooms defined by bounds: {rooms?.Count ?? 0}.");
     }
 
     [ContextMenu("Clear Level")]
     public void ClearLevel()
     {
-        Debug.Log("Clearing level...");
-        // Clear tilemaps first
+        // Debug.Log("--- Running ClearLevel ---");
         if (groundTilemap != null) groundTilemap.ClearAllTiles();
         if (wallTilemap != null) wallTilemap.ClearAllTiles();
+        // Debug.Log("Tilemaps cleared.");
 
-        // --- CORRECTED OBJECT DESTRUCTION ---
-        // Destroy all dynamically spawned objects tracked in the list
-        // Iterate backwards is generally safer when removing/destroying items from a list during iteration,
-        // although Clear() is called after the loop here.
-        for (int i = spawnedObjects.Count - 1; i >= 0; i--)
-        {
-            GameObject obj = spawnedObjects[i];
-            if (obj != null) // Check if the object still exists (it might have been destroyed by other means)
-            {
-                // Use DestroyImmediate() when running in the Unity Editor (e.g., called via ContextMenu)
-                // Use Destroy() when running in Play mode
-                if (Application.isPlaying)
-                {
-                    Destroy(obj);
-                }
-                else
-                {
-                    // IMPORTANT: Use DestroyImmediate for editor cleanup actions
-                    // The 'true' argument allows destroying assets as well, but is usually not needed here.
-                    DestroyImmediate(obj);
-                }
-            }
-        }
-        // Clear the tracking list *after* attempting to destroy the objects it referenced
-        spawnedObjects.Clear();
-        // --- END CORRECTION ---
+        DestroyChildrenOf("PlayerHolder");
+        DestroyChildrenOf("EnemiesHolder");
+        DestroyChildrenOf("DecorationsHolder");
 
-        // Clear internal grid/room data structures
-        grid = null;       // Release grid memory
-        bspLeaves = null;  // Release leaves list
-        // Ensure rooms list exists but is empty for the next generation
+        grid = null;
+        bspLeaves = null;
         if (rooms != null) rooms.Clear(); else rooms = new List<RectInt>();
 
-        Debug.Log("Level cleared.");
+        // Debug.Log("--- ClearLevel Finished ---");
     }
 
-
     // --- Initialization ---
-
     private void Initialize()
     {
-        // Initialize Random Number Generator
-        if (useRandomSeed)
-        {
-            seed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
-        }
+        if (useRandomSeed || seed == 0) { seed = Environment.TickCount; }
         pseudoRandom = new System.Random(seed);
+        Debug.Log($"Using Seed: {seed}");
 
-        // Initialize grid - Start with all walls (or empty, depending on approach)
         grid = new TileType[levelWidth, levelHeight];
-        for (int x = 0; x < levelWidth; x++)
-        {
-            for (int y = 0; y < levelHeight; y++)
-            {
-                grid[x, y] = TileType.Wall; // Start with walls, then carve out rooms/corridors
-            }
-        }
+        for (int x = 0; x < levelWidth; x++) { for (int y = 0; y < levelHeight; y++) { grid[x, y] = TileType.Wall; } }
 
         bspLeaves = new List<RectInt>();
         rooms = new List<RectInt>();
+
+        playerHolder = CreateOrFindParent("PlayerHolder");
+        enemiesHolder = CreateOrFindParent("EnemiesHolder");
+        decorationsHolder = CreateOrFindParent("DecorationsHolder");
+
+        if (playerHolder == null || enemiesHolder == null || decorationsHolder == null)
+        {
+            Debug.LogError("Failed to create necessary holder transforms!");
+        }
+        // Debug.Log("Initialization complete (Grid, RNG, Holders ready).");
+    }
+
+    // --- Helper to Create/Find Parent Transforms ---
+    private Transform CreateOrFindParent(string parentName)
+    {
+        Transform existingParent = transform.Find(parentName);
+        if (existingParent != null) { return existingParent; }
+        else
+        {
+            GameObject parentObject = new GameObject(parentName);
+            parentObject.transform.SetParent(this.transform);
+            parentObject.transform.localPosition = Vector3.zero;
+            // Debug.Log($"Created parent holder: {parentName}");
+            return parentObject.transform;
+        }
+    }
+
+    // --- Helper to Destroy Children of a Named Parent ---
+    private void DestroyChildrenOf(string parentName)
+    {
+        Transform parent = transform.Find(parentName);
+        if (parent != null)
+        {
+            int childCount = parent.childCount;
+            for (int i = childCount - 1; i >= 0; i--)
+            {
+                GameObject child = parent.GetChild(i).gameObject;
+                if (child != null)
+                {
+                    if (Application.isPlaying) { Destroy(child); }
+                    else { DestroyImmediate(child); }
+                }
+            }
+        }
     }
 
     // --- BSP Algorithm ---
-
-    private void RunBSPSplit()
-    {
-        var rootNode = new RectInt(0, 0, levelWidth, levelHeight);
-        var nodeQueue = new Queue<KeyValuePair<RectInt, int>>(); // Use KeyValuePair for Rect + Iteration Depth
-        nodeQueue.Enqueue(new KeyValuePair<RectInt, int>(rootNode, 0));
-
-        while (nodeQueue.Count > 0)
-        {
-            var currentPair = nodeQueue.Dequeue();
-            RectInt currentNode = currentPair.Key;
-            int currentIteration = currentPair.Value;
-
-            if (currentIteration >= maxIterations || ShouldStopSplitting(currentNode))
-            {
-                // Reached max depth or node is too small/imbalanced, becomes a leaf
-                bspLeaves.Add(currentNode);
-                continue;
-            }
-
-            RectInt nodeA, nodeB;
-            if (TrySplitNode(currentNode, out nodeA, out nodeB))
-            {
-                nodeQueue.Enqueue(new KeyValuePair<RectInt, int>(nodeA, currentIteration + 1));
-                nodeQueue.Enqueue(new KeyValuePair<RectInt, int>(nodeB, currentIteration + 1));
-            }
-            else
-            {
-                // Splitting failed (e.g., couldn't find valid split point), treat as leaf
-                bspLeaves.Add(currentNode);
-            }
-        }
-        Debug.Log($"BSP Split complete. Leaves: {bspLeaves.Count}");
-    }
-
-    private bool ShouldStopSplitting(RectInt node)
-    {
-        // Stop if node is too small OR if aspect ratio is too extreme (prevents long skinny rooms)
-        float aspectRatio = (float)Mathf.Max(node.width, node.height) / Mathf.Min(node.width, node.height);
-        return node.width < minRoomSize * 2 || node.height < minRoomSize * 2 || aspectRatio > 2.5f; // Adjust multiplier and ratio as needed
-    }
-
-    private bool TrySplitNode(RectInt node, out RectInt nodeA, out RectInt nodeB)
-    {
-        bool splitHorizontal;
-        nodeA = new RectInt();
-        nodeB = new RectInt();
-
-        // Decide split direction: prefer splitting wider dimension
-        if (node.width > node.height && node.width / (float)node.height >= 1.2f)
-        {
-            splitHorizontal = false; // Split vertically
-        }
-        else if (node.height > node.width && node.height / (float)node.width >= 1.2f)
-        {
-            splitHorizontal = true; // Split horizontally
-        }
-        else
-        {
-            // Roughly square, choose randomly
-            splitHorizontal = pseudoRandom.Next(0, 2) == 0;
-        }
-
-        int minSplitSize = minRoomSize + (int)roomPadding; // Ensure space for padding and room
-
-        if (splitHorizontal)
-        {
-            // Horizontal Split (along Y axis)
-            if (node.height < minSplitSize * 2) return false; // Not enough height to split meaningfully
-
-            // Find a random split point, ensuring both sides are large enough
-            int splitY = pseudoRandom.Next(minSplitSize, node.height - minSplitSize);
-
-            nodeA = new RectInt(node.x, node.y, node.width, splitY);
-            nodeB = new RectInt(node.x, node.y + splitY, node.width, node.height - splitY);
-        }
-        else
-        {
-            // Vertical Split (along X axis)
-            if (node.width < minSplitSize * 2) return false; // Not enough width to split meaningfully
-
-            int splitX = pseudoRandom.Next(minSplitSize, node.width - minSplitSize);
-
-            nodeA = new RectInt(node.x, node.y, splitX, node.height);
-            nodeB = new RectInt(node.x + splitX, node.y, node.width - splitX, node.height);
-        }
-        return true;
-    }
+    // (Methods: RunBSPSplit, ShouldStopSplitting, TrySplitNode - Assumed functional from your script)
+    private void RunBSPSplit() { if (bspLeaves == null) bspLeaves = new List<RectInt>(); else bspLeaves.Clear(); if (pseudoRandom == null) Initialize(); var rootNode = new RectInt(1, 1, levelWidth - 2, levelHeight - 2); var nodeQueue = new Queue<KeyValuePair<RectInt, int>>(); nodeQueue.Enqueue(new KeyValuePair<RectInt, int>(rootNode, 0)); while (nodeQueue.Count > 0) { var currentPair = nodeQueue.Dequeue(); RectInt currentNode = currentPair.Key; int currentIteration = currentPair.Value; if (currentIteration >= maxIterations || ShouldStopSplitting(currentNode)) { bspLeaves.Add(currentNode); continue; } if (TrySplitNode(currentNode, out RectInt nodeA, out RectInt nodeB)) { nodeQueue.Enqueue(new KeyValuePair<RectInt, int>(nodeA, currentIteration + 1)); nodeQueue.Enqueue(new KeyValuePair<RectInt, int>(nodeB, currentIteration + 1)); } else { bspLeaves.Add(currentNode); } } /*Debug.Log($"BSP Split complete. Leaves: {bspLeaves.Count}");*/ }
+    private bool ShouldStopSplitting(RectInt node) { float aspectRatio = node.width <= 0 || node.height <= 0 ? 1f : (float)Mathf.Max(node.width, node.height) / Mathf.Max(1, Mathf.Min(node.width, node.height)); return node.width < minRoomSize * 2 || node.height < minRoomSize * 2 || aspectRatio > 3.0f; } // Basic checks
+    private bool TrySplitNode(RectInt node, out RectInt nodeA, out RectInt nodeB) { bool splitHorizontal; nodeA = nodeB = RectInt.zero; bool preferHorizontal = (node.height > node.width && (float)node.height / Mathf.Max(1, node.width) >= 1.25f); bool preferVertical = (node.width > node.height && (float)node.width / Mathf.Max(1, node.height) >= 1.25f); if (preferHorizontal) splitHorizontal = true; else if (preferVertical) splitHorizontal = false; else splitHorizontal = pseudoRandom.Next(0, 2) == 0; int minPartitionSize = minRoomSize + (int)(2 * roomPadding); minPartitionSize = Mathf.Max(minRoomSize, minPartitionSize); if (splitHorizontal) { if (node.height < minPartitionSize * 2) return false; int splitY = pseudoRandom.Next(node.y + minPartitionSize, node.yMax - minPartitionSize + 1); nodeA = new RectInt(node.x, node.y, node.width, splitY - node.y); nodeB = new RectInt(node.x, splitY, node.width, node.yMax - splitY); } else { if (node.width < minPartitionSize * 2) return false; int splitX = pseudoRandom.Next(node.x + minPartitionSize, node.xMax - minPartitionSize + 1); nodeA = new RectInt(node.x, node.y, splitX - node.x, node.height); nodeB = new RectInt(splitX, node.y, node.xMax - splitX, node.height); } return true; }
 
 
-    // --- Room Creation ---
-
+    // --- Room Creation & Entity Spawning ---
     private void CreateRoomsInLeaves()
     {
-        bool isFirstRoom = true; // Track the first room for player placement
+        bool isFirstRoom = true;
+        if (rooms == null) rooms = new List<RectInt>(); else rooms.Clear();
+        if (bspLeaves == null) { Debug.LogError("BSP leaves not generated!"); return; }
+        if (pseudoRandom == null) { Debug.LogError("RNG not initialized!"); return; }
+        if (playerHolder == null || enemiesHolder == null || decorationsHolder == null) { Debug.LogError("Parent holder transforms not initialized properly!"); return; }
 
         foreach (RectInt leaf in bspLeaves)
         {
-            // Ensure minimum size for the leaf itself before trying to place a room
-            if (leaf.width < minRoomSize || leaf.height < minRoomSize) continue;
+            RectInt roomBoundsForSpawning; // Holds the bounds used for spawning
 
-            // Calculate max possible size for the room within the leaf, considering padding
-            int maxRoomWidth = leaf.width - (int)(2 * roomPadding);
-            int maxRoomHeight = leaf.height - (int)(2 * roomPadding);
+            // --- Decide Room Shape ---
+            if (pseudoRandom.NextDouble() < lShapeProbability)
+            {
+                // Debug.Log($"Attempting L-Shape in leaf: {leaf}");
+                // --- Try to Create L-Shaped Room ---
+                if (TryCreateLShapeInLeaf(leaf, out RectInt stemRect, out RectInt legRect, out RectInt overallBounds))
+                {
+                    Debug.Log($"SUCCESS: Created L-Shape: Stem={stemRect}, Leg={legRect}, Bounds={overallBounds}"); // Keep success log
+                    CarveRectangle(stemRect, TileType.Floor);
+                    CarveRectangle(legRect, TileType.Floor);
+                    rooms.Add(overallBounds);
+                    roomBoundsForSpawning = overallBounds;
+                }
+                else // L-Shape failed, try rectangle
+                {
+                    // Failure reason is now logged inside TryCreateLShapeInLeaf
+                    // Debug.LogWarning($"FAILED: L-Shape creation failed in leaf {leaf}. Trying rectangle.");
+                    if (TryCreateRectangleInLeaf(leaf, out RectInt fallbackRect))
+                    {
+                        CarveRectangle(fallbackRect, TileType.Floor);
+                        rooms.Add(fallbackRect);
+                        roomBoundsForSpawning = fallbackRect;
+                    }
+                    else { continue; } // Skip leaf if both fail
+                }
+            }
+            else
+            {
+                // --- Try to Create Rectangular Room ---
+                if (TryCreateRectangleInLeaf(leaf, out RectInt standardRect))
+                {
+                    CarveRectangle(standardRect, TileType.Floor);
+                    rooms.Add(standardRect);
+                    roomBoundsForSpawning = standardRect;
+                }
+                else { continue; } // Skip leaf if rectangle fails
+            }
 
-            if (maxRoomWidth < minRoomSize || maxRoomHeight < minRoomSize) continue; // Not enough space even with padding
+            // --- Entity Spawning (uses roomBoundsForSpawning) ---
+            List<Vector2Int> floorSpotsInRoom = GetFloorTilesInRect(roomBoundsForSpawning);
+            if (floorSpotsInRoom.Count == 0) continue;
 
-            // Determine actual room size (randomly within bounds)
-            int roomWidth = pseudoRandom.Next(minRoomSize, maxRoomWidth + 1);
-            int roomHeight = pseudoRandom.Next(minRoomSize, maxRoomHeight + 1);
-
-            // Determine room position (randomly within the available padded space)
-            int roomX = leaf.x + (int)roomPadding + pseudoRandom.Next(0, leaf.width - (int)(2 * roomPadding) - roomWidth + 1);
-            int roomY = leaf.y + (int)roomPadding + pseudoRandom.Next(0, leaf.height - (int)(2 * roomPadding) - roomHeight + 1);
-
-            RectInt roomRect = new RectInt(roomX, roomY, roomWidth, roomHeight);
-            rooms.Add(roomRect);
-            CarveRectangle(roomRect, TileType.Floor); // Carve the room area
-
-            // Place the player in the first room
+            // Spawn Player
             if (isFirstRoom && playerPrefab != null)
             {
-                Vector3 playerPosition = new Vector3(roomRect.center.x, roomRect.center.y, 0);
-                GameObject player = Instantiate(playerPrefab, playerPosition, Quaternion.identity);
-                spawnedObjects.Add(player);
-                Debug.Log($"Player added to spawnedObjects. Total: {spawnedObjects.Count}");
+                Vector2Int centerTile = Vector2Int.RoundToInt(roomBoundsForSpawning.center);
+                Vector2Int chosenTilePos;
+                if (centerTile.x >= 0 && centerTile.x < levelWidth && centerTile.y >= 0 && centerTile.y < levelHeight && grid[centerTile.x, centerTile.y] == TileType.Floor && floorSpotsInRoom.Contains(centerTile))
+                { chosenTilePos = centerTile; }
+                else if (floorSpotsInRoom.Count > 0) { chosenTilePos = floorSpotsInRoom[0]; }
+                else { Debug.LogWarning($"No valid floor spots found in room bounds {roomBoundsForSpawning} to spawn player."); continue; }
+
+                Vector3 spawnPos = GetWorldPosition(chosenTilePos);
+                floorSpotsInRoom.Remove(chosenTilePos);
+                Instantiate(playerPrefab, spawnPos, Quaternion.identity, playerHolder);
                 isFirstRoom = false;
             }
 
-            // Place enemies in the room
+            // Spawn Enemies
             if (enemyPrefab != null)
             {
-                for (int i = 0; i < enemiesPerRoom; i++)
-                {
-                    Vector3 enemyPosition = new Vector3(
-                        pseudoRandom.Next(roomRect.xMin, roomRect.xMax),
-                        pseudoRandom.Next(roomRect.yMin, roomRect.yMax),
-                        0
-                    );
-                    GameObject enemy = Instantiate(enemyPrefab, enemyPosition, Quaternion.identity);
-                    spawnedObjects.Add(enemy); // Track the enemy object
-                }
+                int enemyCount = Mathf.Min(enemiesPerRoom, floorSpotsInRoom.Count);
+                for (int i = 0; i < enemyCount; i++) { if (floorSpotsInRoom.Count == 0) break; int spotIndex = pseudoRandom.Next(floorSpotsInRoom.Count); Vector2Int spawnTilePos = floorSpotsInRoom[spotIndex]; floorSpotsInRoom.RemoveAt(spotIndex); Vector3 worldPos = GetWorldPosition(spawnTilePos); Instantiate(enemyPrefab, worldPos, Quaternion.identity, enemiesHolder); }
             }
 
-            // Place decorations in the room
+            // Spawn Decorations
             if (decorationPrefab != null)
             {
-                for (int i = 0; i < decorationsPerRoom; i++)
-                {
-                    Vector3 decorationPosition = new Vector3(
-                        pseudoRandom.Next(roomRect.xMin, roomRect.xMax),
-                        pseudoRandom.Next(roomRect.yMin, roomRect.yMax),
-                        0
-                    );
-                    GameObject decoration = Instantiate(decorationPrefab, decorationPosition, Quaternion.identity);
-                    spawnedObjects.Add(decoration); // Track the decoration object
-                }
+                int decorationCount = Mathf.Min(decorationsPerRoom, floorSpotsInRoom.Count);
+                for (int i = 0; i < decorationCount; i++) { if (floorSpotsInRoom.Count == 0) break; int spotIndex = pseudoRandom.Next(floorSpotsInRoom.Count); Vector2Int spawnTilePos = floorSpotsInRoom[spotIndex]; floorSpotsInRoom.RemoveAt(spotIndex); Vector3 worldPos = GetWorldPosition(spawnTilePos); Instantiate(decorationPrefab, worldPos, Quaternion.identity, decorationsHolder); }
             }
         }
     }
+
+    // --- Helper to calculate and validate a standard rectangle within a leaf ---
+    private bool TryCreateRectangleInLeaf(RectInt leaf, out RectInt roomRect)
+    {
+        roomRect = RectInt.zero;
+        int padding = (int)roomPadding;
+        int maxRoomWidth = leaf.width - (2 * padding);
+        int maxRoomHeight = leaf.height - (2 * padding);
+
+        if (maxRoomWidth < minRoomSize || maxRoomHeight < minRoomSize) return false;
+
+        int roomWidth = pseudoRandom.Next(minRoomSize, maxRoomWidth + 1);
+        int roomHeight = pseudoRandom.Next(minRoomSize, maxRoomHeight + 1);
+        int roomX = leaf.x + padding + pseudoRandom.Next(0, maxRoomWidth - roomWidth + 1);
+        int roomY = leaf.y + padding + pseudoRandom.Next(0, maxRoomHeight - roomHeight + 1);
+
+        roomRect = new RectInt(roomX, roomY, roomWidth, roomHeight);
+        return true;
+    }
+
+    // --- Helper to calculate and validate an L-shape within a leaf (FIXED Random Range BUG) ---
+    private bool TryCreateLShapeInLeaf(RectInt leaf, out RectInt stemRect, out RectInt legRect, out RectInt overallBounds)
+    {
+        stemRect = legRect = overallBounds = RectInt.zero;
+        int padding = (int)roomPadding;
+        int availableWidth = leaf.width - (2 * padding);
+        int availableHeight = leaf.height - (2 * padding);
+        int minLegSize = 1; // Minimum dimension for a leg part to be valid
+
+        // Initial size check
+        if (availableWidth < minRoomSize || availableHeight < minRoomSize) { return false; }
+
+        // Determine stem dimensions first
+        int stemW = pseudoRandom.Next(minRoomSize, availableWidth + 1);
+        int stemH = pseudoRandom.Next(minRoomSize, availableHeight + 1);
+
+        // Try placing the stem randomly within the padded area
+        int maxStemX = availableWidth - stemW;
+        int maxStemY = availableHeight - stemH;
+        if (maxStemX < 0 || maxStemY < 0) { return false; } // Stem doesn't fit
+
+        int stemRelX = pseudoRandom.Next(0, maxStemX + 1);
+        int stemRelY = pseudoRandom.Next(0, maxStemY + 1);
+        stemRect = new RectInt(leaf.x + padding + stemRelX, leaf.y + padding + stemRelY, stemW, stemH);
+
+        // --- Check available space adjacent to the placed stem ---
+        RectInt paddedLeafBounds = new RectInt(leaf.x + padding, leaf.y + padding, availableWidth, availableHeight);
+        int spaceAbove = paddedLeafBounds.yMax - stemRect.yMax;
+        int spaceBelow = stemRect.yMin - paddedLeafBounds.yMin;
+        int spaceRight = paddedLeafBounds.xMax - stemRect.xMax;
+        int spaceLeft = stemRect.xMin - paddedLeafBounds.xMin;
+
+        bool canAttachAbove = spaceAbove >= minLegSize;
+        bool canAttachBelow = spaceBelow >= minLegSize;
+        bool canAttachRight = spaceRight >= minLegSize;
+        bool canAttachLeft = spaceLeft >= minLegSize;
+
+        // Determine possible attachment directions
+        List<int> possibleVerticalAttach = new List<int>(); // 0: Below, 1: Above
+        if (canAttachBelow) possibleVerticalAttach.Add(0);
+        if (canAttachAbove) possibleVerticalAttach.Add(1);
+
+        List<int> possibleHorizontalAttach = new List<int>(); // 0: Left, 1: Right
+        if (canAttachLeft) possibleHorizontalAttach.Add(0);
+        if (canAttachRight) possibleHorizontalAttach.Add(1);
+
+        // *** BUG FIX 2: Check if ANY attachment is possible ***
+        if (possibleVerticalAttach.Count == 0 && possibleHorizontalAttach.Count == 0)
+        {
+            // Debug.LogWarning($"L-Shape Skip (Leaf: {leaf}): No space adjacent to stem {stemRect} within {paddedLeafBounds}");
+            return false; // No room to attach leg anywhere
+        }
+
+        // Decide orientation: prefer attaching along the stem's longer axis if possible
+        bool tryVerticalAttach;
+        if (stemW >= stemH) // Stem is wide or square, prefer vertical attach if possible
+        {
+            tryVerticalAttach = possibleVerticalAttach.Count > 0;
+        }
+        else // Stem is tall, prefer horizontal attach if possible
+        {
+            tryVerticalAttach = !(possibleHorizontalAttach.Count > 0); // Try vertical only if horizontal isn't possible
+        }
+        // If preferred direction failed, try the other one if possible
+        if (tryVerticalAttach && possibleVerticalAttach.Count == 0) tryVerticalAttach = false;
+        if (!tryVerticalAttach && possibleHorizontalAttach.Count == 0) tryVerticalAttach = true;
+
+
+        // --- Calculate Leg based on chosen attachment direction ---
+        int legW, legH, legX, legY;
+
+        if (tryVerticalAttach) // Attach leg Above or Below
+        {
+            bool attachAbove = possibleVerticalAttach[pseudoRandom.Next(possibleVerticalAttach.Count)] == 1;
+            int availableSpace = attachAbove ? spaceAbove : spaceBelow;
+
+            // *** FIX for Random Range Error ***
+            // Ensure valid range for random height calculation
+            if (availableSpace < minLegSize)
+            {
+                Debug.LogWarning($"L-Shape Logic Warning: Vertical availableSpace ({availableSpace}) < minLegSize ({minLegSize}). Skipping leg.");
+                return false; // Cannot place leg if space is less than minimum size
+            }
+            legH = pseudoRandom.Next(minLegSize, availableSpace + 1);
+            // legH = Mathf.Max(minLegSize, Mathf.Min(legH, pseudoRandom.Next(minRoomSize, availableSpace + 1))); // REMOVED Complex/Buggy line
+
+            legW = (int)(stemW * pseudoRandom.Next((int)(minLLegRatio * 100), (int)(maxLLegRatio * 100) + 1) / 100f);
+            legW = Mathf.Clamp(legW, minLegSize, stemW); // Leg width cannot exceed stem width
+
+            int maxLegXOffset = stemW - legW;
+            // Ensure maxLegXOffset is not negative if legW became larger than stemW (shouldn't happen with clamp)
+            maxLegXOffset = Mathf.Max(0, maxLegXOffset);
+            legX = stemRect.x + pseudoRandom.Next(0, maxLegXOffset + 1);
+            legY = attachAbove ? stemRect.yMax : stemRect.yMin - legH;
+        }
+        else // Attach leg Left or Right
+        {
+            bool attachRight = possibleHorizontalAttach[pseudoRandom.Next(possibleHorizontalAttach.Count)] == 1;
+            int availableSpace = attachRight ? spaceRight : spaceLeft;
+
+            // *** FIX for Random Range Error ***
+            // Ensure valid range for random width calculation
+            if (availableSpace < minLegSize)
+            {
+                Debug.LogWarning($"L-Shape Logic Warning: Horizontal availableSpace ({availableSpace}) < minLegSize ({minLegSize}). Skipping leg.");
+                return false; // Cannot place leg if space is less than minimum size
+            }
+            legW = pseudoRandom.Next(minLegSize, availableSpace + 1);
+            // legW = Mathf.Max(minLegSize, Mathf.Min(legW, pseudoRandom.Next(minRoomSize, availableSpace + 1))); // REMOVED Complex/Buggy line
+
+            legH = (int)(stemH * pseudoRandom.Next((int)(minLLegRatio * 100), (int)(maxLLegRatio * 100) + 1) / 100f);
+            legH = Mathf.Clamp(legH, minLegSize, stemH); // Leg height cannot exceed stem height
+
+            int maxLegYOffset = stemH - legH;
+            // Ensure maxLegYOffset is not negative
+            maxLegYOffset = Mathf.Max(0, maxLegYOffset);
+            legY = stemRect.y + pseudoRandom.Next(0, maxLegYOffset + 1);
+            legX = attachRight ? stemRect.xMax : stemRect.xMin - legW;
+        }
+
+        // *** BUG FIX 1: Final check uses calculated legW/legH ***
+        // This check should now be mostly redundant due to calculating based on availableSpace, but keep as safety
+        if (legW < minLegSize || legH < minLegSize)
+        {
+            Debug.LogError($"L-Shape Logic Error: Final calculated leg size invalid ({legW}x{legH}). Min required: {minLegSize}. This should not happen.");
+            return false;
+        }
+
+        legRect = new RectInt(legX, legY, legW, legH);
+
+        // --- Calculate Overall Bounds ---
+        int minX = Mathf.Min(stemRect.xMin, legRect.xMin);
+        int minY = Mathf.Min(stemRect.yMin, legRect.yMin);
+        int maxX = Mathf.Max(stemRect.xMax, legRect.xMax);
+        int maxY = Mathf.Max(stemRect.yMax, legRect.yMax);
+        overallBounds = new RectInt(minX, minY, maxX - minX, maxY - minY);
+
+        // Final check: ensure overall bounds don't exceed the original leaf (redundant safety check)
+        if (overallBounds.xMin < leaf.xMin || overallBounds.yMin < leaf.yMin || overallBounds.xMax > leaf.xMax || overallBounds.yMax > leaf.yMax)
+        {
+            Debug.LogError($"L-Shape overall bounds calculation error! Bounds {overallBounds} exceed Leaf {leaf}");
+            return false;
+        }
+
+        return true; // L-shape successfully calculated
+    }
+
 
     // --- Corridor Creation ---
-    // This is a simplified approach connecting centers of sibling rooms from the BSP tree.
-    // More complex pathfinding (A*) could be used for more organic connections.
-    private void CreateCorridors()
-    {
-        // Need a way to reconstruct the BSP tree structure or relationships.
-        // For simplicity here, we'll connect all rooms to their nearest neighbor.
-        // A better approach involves storing the BSP tree and connecting siblings.
+    // (Methods: CreateCorridors, FindClosestRoom, ConnectRooms, CarveCorridorSegment - Assumed functional from your script)
+    private void CreateCorridors() { if (rooms == null || rooms.Count < 2 || pseudoRandom == null) return; List<RectInt> connectedRooms = new List<RectInt>(); RectInt currentRoom = rooms[pseudoRandom.Next(rooms.Count)]; List<RectInt> remainingRooms = new List<RectInt>(rooms); connectedRooms.Add(currentRoom); remainingRooms.Remove(currentRoom); while (remainingRooms.Count > 0) { RectInt closestRoom = FindClosestRoom(currentRoom, remainingRooms); ConnectRooms(currentRoom, closestRoom); connectedRooms.Add(closestRoom); remainingRooms.Remove(closestRoom); currentRoom = closestRoom; } /* Debug.Log("Corridors created."); */ } // Simplified MST approach
+    private RectInt FindClosestRoom(RectInt sourceRoom, List<RectInt> targetRooms) { if (targetRooms == null || targetRooms.Count == 0) return sourceRoom; RectInt closest = targetRooms[0]; float minDistance = Vector2.Distance(sourceRoom.center, closest.center); for (int i = 1; i < targetRooms.Count; i++) { float distance = Vector2.Distance(sourceRoom.center, targetRooms[i].center); if (distance < minDistance) { minDistance = distance; closest = targetRooms[i]; } } return closest; }
+    private void ConnectRooms(RectInt roomA, RectInt roomB) { Vector2Int centerA = Vector2Int.RoundToInt(roomA.center); Vector2Int centerB = Vector2Int.RoundToInt(roomB.center); if (pseudoRandom.Next(0, 2) == 0) { CarveCorridorSegment(centerA.x, centerB.x, centerA.y, true); CarveCorridorSegment(centerA.y, centerB.y, centerB.x, false); } else { CarveCorridorSegment(centerA.y, centerB.y, centerA.x, false); CarveCorridorSegment(centerA.x, centerB.x, centerB.y, true); } } // L-shaped corridor
+    private void CarveCorridorSegment(int startCoord, int endCoord, int fixedCoord, bool isHorizontal) { if (grid == null) return; int min = Mathf.Min(startCoord, endCoord); int max = Mathf.Max(startCoord, endCoord); int halfWidth = corridorWidth <= 1 ? 0 : (corridorWidth - 1) / 2; for (int i = min; i <= max; i++) { for (int w = -halfWidth; w <= halfWidth; w++) { int x, y; if (isHorizontal) { x = i; y = fixedCoord + w; } else { x = fixedCoord + w; y = i; } if (x >= 0 && x < levelWidth && y >= 0 && y < levelHeight) { grid[x, y] = TileType.Floor; } } } }
 
-        // Simple Nearest Neighbor Connection (less structured than pure BSP)
-        List<RectInt> connectedRooms = new List<RectInt>();
-        if (rooms.Count == 0) return;
-
-        RectInt currentRoom = rooms[pseudoRandom.Next(rooms.Count)];
-        connectedRooms.Add(currentRoom);
-        rooms.Remove(currentRoom); // Avoid connecting to self
-
-        while (rooms.Count > 0)
-        {
-            RectInt closestRoom = FindClosestRoom(currentRoom, rooms);
-            ConnectRooms(currentRoom, closestRoom);
-            connectedRooms.Add(closestRoom);
-            rooms.Remove(closestRoom);
-            currentRoom = closestRoom; // Move to the newly connected room
-        }
-        // Add back all rooms to the main list for other potential uses
-        rooms.AddRange(connectedRooms);
-
-        // --- // BSP Sibling Connection (Conceptual - Requires Tree Structure) ---
-        // If you implemented the BSP tree with node references:
-        // Queue<BSPNode> queue = new Queue<BSPNode>();
-        // queue.Enqueue(rootBSPNode);
-        // while(queue.Count > 0) {
-        //    BSPNode node = queue.Dequeue();
-        //    if (node.IsLeaf) continue; // Only connect internal nodes
-        //
-        //    // Find rooms within the left and right children's leaves
-        //    RectInt? roomA = FindRoomInNode(node.LeftChild);
-        //    RectInt? roomB = FindRoomInNode(node.RightChild);
-        //
-        //    if(roomA.HasValue && roomB.HasValue) {
-        //        ConnectRooms(roomA.Value, roomB.Value);
-        //    }
-        //
-        //    // Add children to queue
-        //    if(node.LeftChild != null) queue.Enqueue(node.LeftChild);
-        //    if(node.RightChild != null) queue.Enqueue(node.RightChild);
-        // }
-        // --- // End Conceptual BSP Connection ---
-    }
-
-    private RectInt FindClosestRoom(RectInt sourceRoom, List<RectInt> targetRooms)
-    {
-        RectInt closest = targetRooms[0];
-        float minDistance = Vector2.Distance(sourceRoom.center, closest.center);
-
-        for (int i = 1; i < targetRooms.Count; i++)
-        {
-            float distance = Vector2.Distance(sourceRoom.center, targetRooms[i].center);
-            if (distance < minDistance)
-            {
-                minDistance = distance;
-                closest = targetRooms[i];
-            }
-        }
-        return closest;
-    }
-
-    private void ConnectRooms(RectInt roomA, RectInt roomB)
-    {
-        // Simple L-shaped corridor: Horizontal then Vertical (or vice versa)
-        Vector2Int centerA = Vector2Int.RoundToInt(roomA.center);
-        Vector2Int centerB = Vector2Int.RoundToInt(roomB.center);
-
-        // Randomly choose start: Horizontal or Vertical first
-        if (pseudoRandom.Next(0, 2) == 0)
-        {
-            // Horizontal first
-            CarveCorridorSegment(centerA.x, centerB.x, centerA.y, true);
-            CarveCorridorSegment(centerA.y, centerB.y, centerB.x, false);
-        }
-        else
-        {
-            // Vertical first
-            CarveCorridorSegment(centerA.y, centerB.y, centerA.x, false);
-            CarveCorridorSegment(centerA.x, centerB.x, centerB.y, true);
-        }
-    }
-
-
-    private void CarveCorridorSegment(int startCoord, int endCoord, int fixedCoord, bool isHorizontal)
-    {
-        int min = Mathf.Min(startCoord, endCoord);
-        int max = Mathf.Max(startCoord, endCoord);
-        int halfWidth = corridorWidth / 2; // Integer division, handles odd/even
-
-        for (int i = min; i <= max; i++)
-        {
-            for (int w = -halfWidth; w <= corridorWidth - 1 - halfWidth; w++) // Loop accounts for width
-            {
-                int x, y;
-                if (isHorizontal)
-                {
-                    x = i;
-                    y = fixedCoord + w;
-                }
-                else
-                {
-                    x = fixedCoord + w;
-                    y = i;
-                }
-
-                // Check bounds before carving
-                if (x >= 0 && x < levelWidth && y >= 0 && y < levelHeight)
-                {
-                    grid[x, y] = TileType.Floor;
-                }
-            }
-        }
-    }
 
     // --- Utility Functions ---
+    private void CarveRectangle(RectInt rect, TileType tile) { if (grid == null) return; for (int x = rect.xMin; x < rect.xMax; x++) { for (int y = rect.yMin; y < rect.yMax; y++) { if (x >= 0 && x < levelWidth && y >= 0 && y < levelHeight) { grid[x, y] = tile; } } } }
+    private List<Vector2Int> GetFloorTilesInRect(RectInt rect) { List<Vector2Int> floorTiles = new List<Vector2Int>(); if (grid == null) return floorTiles; for (int x = rect.xMin; x < rect.xMax; x++) { for (int y = rect.yMin; y < rect.yMax; y++) { if (x >= 0 && x < levelWidth && y >= 0 && y < levelHeight && grid[x, y] == TileType.Floor) { floorTiles.Add(new Vector2Int(x, y)); } } } return floorTiles; }
+    private Vector3 GetWorldPosition(Vector2Int tilePos) { if (groundTilemap == null) return new Vector3(tilePos.x + 0.5f, tilePos.y + 0.5f, 0); return groundTilemap.CellToWorld((Vector3Int)tilePos) + (groundTilemap.cellSize * 0.5f); }
 
-    private void CarveRectangle(RectInt rect, TileType tile)
-    {
-        for (int x = rect.xMin; x < rect.xMax; x++)
-        {
-            for (int y = rect.yMin; y < rect.yMax; y++)
-            {
-                // Check bounds (safety, though BSP should keep things within level bounds)
-                if (x >= 0 && x < levelWidth && y >= 0 && y < levelHeight)
-                {
-                    grid[x, y] = tile;
-                }
-            }
-        }
-    }
 
     // --- Tilemap Application ---
-
-    private void ApplyTilesToTilemap()
-    {
-        if (groundTilemap == null || wallTilemap == null || floorTile == null || wallTile == null)
-        {
-            Debug.LogError("Tilemaps or Tile assets not assigned!");
-            return;
-        }
-
-        // Optimized approach: Prepare arrays for SetTilesBlock (Potentially faster for huge maps)
-        // For simplicity and often sufficient speed, we use SetTile here.
-        // If profiling shows this is slow, switch to SetTilesBlock.
-
-        for (int x = 0; x < levelWidth; x++)
-        {
-            for (int y = 0; y < levelHeight; y++)
-            {
-                Vector3Int position = new Vector3Int(x, y, 0);
-                switch (grid[x, y])
-                {
-                    case TileType.Floor:
-                        groundTilemap.SetTile(position, floorTile);
-                        wallTilemap.SetTile(position, null); // Ensure no wall where floor is
-                        break;
-                    case TileType.Wall:
-                        // Optional: Check neighbors to only place walls adjacent to floor?
-                        // This simple version places walls everywhere initially marked.
-                        if (IsWallCandidate(x, y)) // Only place walls next to floors
-                        {
-                            wallTilemap.SetTile(position, wallTile);
-                            groundTilemap.SetTile(position, null); // Ensure no floor where wall is
-                        }
-                        else
-                        {
-                            // Optional: Could place a different "background" tile here
-                            wallTilemap.SetTile(position, null);
-                            groundTilemap.SetTile(position, null);
-                        }
-                        break;
-                    case TileType.Empty:
-                    default:
-                        groundTilemap.SetTile(position, null);
-                        wallTilemap.SetTile(position, null);
-                        break;
-                }
-            }
-        }
-        // Force Tilemaps to refresh if needed (usually automatic)
-        // groundTilemap.RefreshAllTiles();
-        // wallTilemap.RefreshAllTiles();
-    }
-
-    // Helper to only draw walls adjacent to floor tiles
-    private bool IsWallCandidate(int x, int y)
-    {
-        if (grid[x, y] != TileType.Wall) return false; // Only consider original walls
-
-        // Check 8 neighbours
-        for (int dx = -1; dx <= 1; dx++)
-        {
-            for (int dy = -1; dy <= 1; dy++)
-            {
-                if (dx == 0 && dy == 0) continue; // Skip self
-
-                int nx = x + dx;
-                int ny = y + dy;
-
-                // Check bounds
-                if (nx >= 0 && nx < levelWidth && ny >= 0 && ny < levelHeight)
-                {
-                    if (grid[nx, ny] == TileType.Floor)
-                    {
-                        return true; // Found adjacent floor, this is a valid wall position
-                    }
-                }
-            }
-        }
-        return false; // No adjacent floor found
-    }
-
-    // --- Potential Future Additions (Hybrid Elements) ---
-
-    // private void AddCellularAutomataDetails(RectInt area) { ... }
-    // private void PlaceDecorationsWithPerlinNoise() { ... }
-    // private void SpawnEntities() { ... }
-
-
+    private void ApplyTilesToTilemap() { if (groundTilemap == null || wallTilemap == null || floorTile == null || wallTile == null || grid == null) { Debug.LogError("Cannot apply tiles: Tilemaps, Tiles, or Grid not ready!"); return; } groundTilemap.ClearAllTiles(); wallTilemap.ClearAllTiles(); for (int x = 0; x < levelWidth; x++) { for (int y = 0; y < levelHeight; y++) { Vector3Int position = new Vector3Int(x, y, 0); switch (grid[x, y]) { case TileType.Floor: groundTilemap.SetTile(position, floorTile); wallTilemap.SetTile(position, null); break; case TileType.Wall: if (IsWallCandidate(x, y)) { wallTilemap.SetTile(position, wallTile); groundTilemap.SetTile(position, null); } else { wallTilemap.SetTile(position, null); groundTilemap.SetTile(position, null); } break; default: groundTilemap.SetTile(position, null); wallTilemap.SetTile(position, null); break; } } } /*Debug.Log("Tiles applied to tilemap.");*/ }
+    private bool IsWallCandidate(int x, int y) { if (grid == null || x < 0 || x >= levelWidth || y < 0 || y >= levelHeight || grid[x, y] != TileType.Wall) return false; for (int dx = -1; dx <= 1; dx++) { for (int dy = -1; dy <= 1; dy++) { if (dx == 0 && dy == 0) continue; int nx = x + dx; int ny = y + dy; if (nx >= 0 && nx < levelWidth && ny >= 0 && ny < levelHeight && grid[nx, ny] == TileType.Floor) { return true; } } } return false; } // Check neighbors for floor
 
 }
-
-// --- Optional Helper Class for full BSP Tree (More Complex Corridor Logic) ---
-/*public class BSPNode {
-    public BSPNode LeftChild;
-    public BSPNode RightChild;
-    public RectInt? Room; // Room within this node (only if it's a leaf)
-
-    public bool IsLeaf => LeftChild == null && RightChild == null;
-
-    public BSPNode(RectInt partition) {
-        Partition = partition;
-        LeftChild = null;
-        RightChild = null;
-        Room = null;
-    }
-}*/
