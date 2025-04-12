@@ -16,7 +16,7 @@ public class HybridLevelGenerator : MonoBehaviour
     public int maxIterations = 5;
     public float roomPadding = 2f; // Padding around rooms within BSP leaves
 
-    [Header("Room Shape Settings")] // <-- New parameters added here
+    [Header("Room Shape Settings")]
     [Tooltip("The chance (0 to 1) of attempting to generate an L-shaped room instead of a rectangle within a BSP leaf.")]
     [Range(0f, 1f)]
     public float lShapeProbability = 0.3f; // 30% chance for L-shape
@@ -26,6 +26,14 @@ public class HybridLevelGenerator : MonoBehaviour
     [Tooltip("Maximum length of the shorter 'leg' of an L-shape, relative to the stem dimension.")]
     [Range(0.5f, 1.0f)]
     public float maxLLegRatio = 0.7f;
+
+    // --- Room Template Settings ---
+    [Header("Room Template Settings")]
+    [Tooltip("Prefabs containing Tilemaps that define pre-designed room layouts.")]
+    public List<GameObject> roomTemplatePrefabs;
+    [Tooltip("The chance (0 to 1) of attempting to use a room template instead of procedural generation (Rect/L-shape). Checked before L-shape probability.")]
+    [Range(0f, 1f)]
+    public float roomTemplateProbability = 0.2f; // 20% chance to try a template first
 
     [Header("Corridor Settings")]
     public int corridorWidth = 1;
@@ -50,7 +58,7 @@ public class HybridLevelGenerator : MonoBehaviour
     // Internal Data
     private TileType[,] grid;
     private List<RectInt> bspLeaves;
-    private List<RectInt> rooms; // Stores the bounds of placed rooms (Rect or L-Shape overall bounds)
+    private List<RectInt> rooms; // Stores the bounds of placed rooms (Rect, L-Shape overall bounds, or Template bounds)
     private System.Random pseudoRandom;
 
     // Parent Transform References
@@ -72,9 +80,15 @@ public class HybridLevelGenerator : MonoBehaviour
             Debug.LogError("Initialization failed! Cannot generate level.", this);
             return;
         }
+        if (floorTile == null || wallTile == null)
+        {
+            Debug.LogError("Floor Tile or Wall Tile is not assigned in the Inspector!", this);
+            return;
+        }
+
 
         RunBSPSplit();
-        CreateRoomsInLeaves(); // <-- This method is modified for L-Shapes
+        CreateRoomsInLeaves(); // <-- This method is modified for Templates & L-Shapes
         CreateCorridors();
         ApplyTilesToTilemap();
 
@@ -151,6 +165,7 @@ public class HybridLevelGenerator : MonoBehaviour
                 GameObject child = parent.GetChild(i).gameObject;
                 if (child != null)
                 {
+                    // Use DestroyImmediate in editor mode, Destroy in play mode
                     if (Application.isPlaying) { Destroy(child); }
                     else { DestroyImmediate(child); }
                 }
@@ -165,7 +180,7 @@ public class HybridLevelGenerator : MonoBehaviour
     private bool TrySplitNode(RectInt node, out RectInt nodeA, out RectInt nodeB) { bool splitHorizontal; nodeA = nodeB = RectInt.zero; bool preferHorizontal = (node.height > node.width && (float)node.height / Mathf.Max(1, node.width) >= 1.25f); bool preferVertical = (node.width > node.height && (float)node.width / Mathf.Max(1, node.height) >= 1.25f); if (preferHorizontal) splitHorizontal = true; else if (preferVertical) splitHorizontal = false; else splitHorizontal = pseudoRandom.Next(0, 2) == 0; int minPartitionSize = minRoomSize + (int)(2 * roomPadding); minPartitionSize = Mathf.Max(minRoomSize, minPartitionSize); if (splitHorizontal) { if (node.height < minPartitionSize * 2) return false; int splitY = pseudoRandom.Next(node.y + minPartitionSize, node.yMax - minPartitionSize + 1); nodeA = new RectInt(node.x, node.y, node.width, splitY - node.y); nodeB = new RectInt(node.x, splitY, node.width, node.yMax - splitY); } else { if (node.width < minPartitionSize * 2) return false; int splitX = pseudoRandom.Next(node.x + minPartitionSize, node.xMax - minPartitionSize + 1); nodeA = new RectInt(node.x, node.y, splitX - node.x, node.height); nodeB = new RectInt(splitX, node.y, node.xMax - splitX, node.height); } return true; }
 
 
-    // --- Room Creation & Entity Spawning ---
+    // --- Room Creation & Entity Spawning (UPDATED FOR TEMPLATES) ---
     private void CreateRoomsInLeaves()
     {
         bool isFirstRoom = true;
@@ -176,80 +191,87 @@ public class HybridLevelGenerator : MonoBehaviour
 
         foreach (RectInt leaf in bspLeaves)
         {
-            RectInt roomBoundsForSpawning; // Holds the bounds used for spawning
+            RectInt roomBoundsForSpawning = RectInt.zero; // Holds the bounds used for spawning
+            bool roomCreated = false;
 
             // --- Decide Room Shape ---
-            if (pseudoRandom.NextDouble() < lShapeProbability)
+
+            // 1. Try Template First
+            if (roomTemplatePrefabs != null && roomTemplatePrefabs.Count > 0 && pseudoRandom.NextDouble() < roomTemplateProbability)
             {
-                // Debug.Log($"Attempting L-Shape in leaf: {leaf}");
-                // --- Try to Create L-Shaped Room ---
+                if (TryPlaceRoomTemplate(leaf, out roomBoundsForSpawning))
+                {
+                    roomCreated = true;
+                    Debug.Log($"SUCCESS: Placed Room Template in leaf {leaf}. Bounds: {roomBoundsForSpawning}");
+                }
+                // else { Debug.LogWarning($"FAILED: Room Template placement failed in leaf {leaf}."); } // Optional failure log
+            }
+
+            // 2. If Template not tried or failed, try L-Shape
+            if (!roomCreated && pseudoRandom.NextDouble() < lShapeProbability)
+            {
                 if (TryCreateLShapeInLeaf(leaf, out RectInt stemRect, out RectInt legRect, out RectInt overallBounds))
                 {
-                    Debug.Log($"SUCCESS: Created L-Shape: Stem={stemRect}, Leg={legRect}, Bounds={overallBounds}"); // Keep success log
+                    Debug.Log($"SUCCESS: Created L-Shape: Stem={stemRect}, Leg={legRect}, Bounds={overallBounds}");
                     CarveRectangle(stemRect, TileType.Floor);
                     CarveRectangle(legRect, TileType.Floor);
                     rooms.Add(overallBounds);
                     roomBoundsForSpawning = overallBounds;
+                    roomCreated = true;
                 }
-                else // L-Shape failed, try rectangle
-                {
-                    // Failure reason is now logged inside TryCreateLShapeInLeaf
-                    // Debug.LogWarning($"FAILED: L-Shape creation failed in leaf {leaf}. Trying rectangle.");
-                    if (TryCreateRectangleInLeaf(leaf, out RectInt fallbackRect))
-                    {
-                        CarveRectangle(fallbackRect, TileType.Floor);
-                        rooms.Add(fallbackRect);
-                        roomBoundsForSpawning = fallbackRect;
-                    }
-                    else { continue; } // Skip leaf if both fail
-                }
+                // else { // Failure reason logged inside TryCreateLShapeInLeaf }
             }
-            else
+
+            // 3. If Template and L-Shape not tried or failed, try Rectangle
+            if (!roomCreated)
             {
-                // --- Try to Create Rectangular Room ---
                 if (TryCreateRectangleInLeaf(leaf, out RectInt standardRect))
                 {
                     CarveRectangle(standardRect, TileType.Floor);
                     rooms.Add(standardRect);
                     roomBoundsForSpawning = standardRect;
+                    roomCreated = true;
                 }
-                else { continue; } // Skip leaf if rectangle fails
+                // else { // Leaf too small for even a rectangle }
             }
 
-            // --- Entity Spawning (uses roomBoundsForSpawning) ---
-            List<Vector2Int> floorSpotsInRoom = GetFloorTilesInRect(roomBoundsForSpawning);
-            if (floorSpotsInRoom.Count == 0) continue;
-
-            // Spawn Player
-            if (isFirstRoom && playerPrefab != null)
+            // --- Entity Spawning (If any room was successfully created in this leaf) ---
+            if (roomCreated)
             {
-                Vector2Int centerTile = Vector2Int.RoundToInt(roomBoundsForSpawning.center);
-                Vector2Int chosenTilePos;
-                if (centerTile.x >= 0 && centerTile.x < levelWidth && centerTile.y >= 0 && centerTile.y < levelHeight && grid[centerTile.x, centerTile.y] == TileType.Floor && floorSpotsInRoom.Contains(centerTile))
-                { chosenTilePos = centerTile; }
-                else if (floorSpotsInRoom.Count > 0) { chosenTilePos = floorSpotsInRoom[0]; }
-                else { Debug.LogWarning($"No valid floor spots found in room bounds {roomBoundsForSpawning} to spawn player."); continue; }
+                List<Vector2Int> floorSpotsInRoom = GetFloorTilesInRect(roomBoundsForSpawning);
+                if (floorSpotsInRoom.Count == 0) continue; // Skip spawning if somehow no floor tiles exist
 
-                Vector3 spawnPos = GetWorldPosition(chosenTilePos);
-                floorSpotsInRoom.Remove(chosenTilePos);
-                Instantiate(playerPrefab, spawnPos, Quaternion.identity, playerHolder);
-                isFirstRoom = false;
-            }
+                // Spawn Player
+                if (isFirstRoom && playerPrefab != null)
+                {
+                    Vector2Int centerTile = Vector2Int.RoundToInt(roomBoundsForSpawning.center);
+                    Vector2Int chosenTilePos;
+                    if (centerTile.x >= 0 && centerTile.x < levelWidth && centerTile.y >= 0 && centerTile.y < levelHeight && grid[centerTile.x, centerTile.y] == TileType.Floor && floorSpotsInRoom.Contains(centerTile))
+                    { chosenTilePos = centerTile; }
+                    else if (floorSpotsInRoom.Count > 0) { chosenTilePos = floorSpotsInRoom[0]; }
+                    else { Debug.LogWarning($"No valid floor spots found in room bounds {roomBoundsForSpawning} to spawn player."); continue; }
 
-            // Spawn Enemies
-            if (enemyPrefab != null)
-            {
-                int enemyCount = Mathf.Min(enemiesPerRoom, floorSpotsInRoom.Count);
-                for (int i = 0; i < enemyCount; i++) { if (floorSpotsInRoom.Count == 0) break; int spotIndex = pseudoRandom.Next(floorSpotsInRoom.Count); Vector2Int spawnTilePos = floorSpotsInRoom[spotIndex]; floorSpotsInRoom.RemoveAt(spotIndex); Vector3 worldPos = GetWorldPosition(spawnTilePos); Instantiate(enemyPrefab, worldPos, Quaternion.identity, enemiesHolder); }
-            }
+                    Vector3 spawnPos = GetWorldPosition(chosenTilePos);
+                    floorSpotsInRoom.Remove(chosenTilePos);
+                    Instantiate(playerPrefab, spawnPos, Quaternion.identity, playerHolder);
+                    isFirstRoom = false;
+                }
 
-            // Spawn Decorations
-            if (decorationPrefab != null)
-            {
-                int decorationCount = Mathf.Min(decorationsPerRoom, floorSpotsInRoom.Count);
-                for (int i = 0; i < decorationCount; i++) { if (floorSpotsInRoom.Count == 0) break; int spotIndex = pseudoRandom.Next(floorSpotsInRoom.Count); Vector2Int spawnTilePos = floorSpotsInRoom[spotIndex]; floorSpotsInRoom.RemoveAt(spotIndex); Vector3 worldPos = GetWorldPosition(spawnTilePos); Instantiate(decorationPrefab, worldPos, Quaternion.identity, decorationsHolder); }
-            }
-        }
+                // Spawn Enemies
+                if (enemyPrefab != null)
+                {
+                    int enemyCount = Mathf.Min(enemiesPerRoom, floorSpotsInRoom.Count);
+                    for (int i = 0; i < enemyCount; i++) { if (floorSpotsInRoom.Count == 0) break; int spotIndex = pseudoRandom.Next(floorSpotsInRoom.Count); Vector2Int spawnTilePos = floorSpotsInRoom[spotIndex]; floorSpotsInRoom.RemoveAt(spotIndex); Vector3 worldPos = GetWorldPosition(spawnTilePos); Instantiate(enemyPrefab, worldPos, Quaternion.identity, enemiesHolder); }
+                }
+
+                // Spawn Decorations
+                if (decorationPrefab != null)
+                {
+                    int decorationCount = Mathf.Min(decorationsPerRoom, floorSpotsInRoom.Count);
+                    for (int i = 0; i < decorationCount; i++) { if (floorSpotsInRoom.Count == 0) break; int spotIndex = pseudoRandom.Next(floorSpotsInRoom.Count); Vector2Int spawnTilePos = floorSpotsInRoom[spotIndex]; floorSpotsInRoom.RemoveAt(spotIndex); Vector3 worldPos = GetWorldPosition(spawnTilePos); Instantiate(decorationPrefab, worldPos, Quaternion.identity, decorationsHolder); }
+                }
+            } // end if (roomCreated)
+        } // end foreach leaf
     }
 
     // --- Helper to calculate and validate a standard rectangle within a leaf ---
@@ -271,7 +293,7 @@ public class HybridLevelGenerator : MonoBehaviour
         return true;
     }
 
-    // --- Helper to calculate and validate an L-shape within a leaf (FIXED Random Range BUG) ---
+    // --- Helper to calculate and validate an L-shape within a leaf ---
     private bool TryCreateLShapeInLeaf(RectInt leaf, out RectInt stemRect, out RectInt legRect, out RectInt overallBounds)
     {
         stemRect = legRect = overallBounds = RectInt.zero;
@@ -317,7 +339,7 @@ public class HybridLevelGenerator : MonoBehaviour
         if (canAttachLeft) possibleHorizontalAttach.Add(0);
         if (canAttachRight) possibleHorizontalAttach.Add(1);
 
-        // *** BUG FIX 2: Check if ANY attachment is possible ***
+        // Check if ANY attachment is possible
         if (possibleVerticalAttach.Count == 0 && possibleHorizontalAttach.Count == 0)
         {
             // Debug.LogWarning($"L-Shape Skip (Leaf: {leaf}): No space adjacent to stem {stemRect} within {paddedLeafBounds}");
@@ -326,14 +348,8 @@ public class HybridLevelGenerator : MonoBehaviour
 
         // Decide orientation: prefer attaching along the stem's longer axis if possible
         bool tryVerticalAttach;
-        if (stemW >= stemH) // Stem is wide or square, prefer vertical attach if possible
-        {
-            tryVerticalAttach = possibleVerticalAttach.Count > 0;
-        }
-        else // Stem is tall, prefer horizontal attach if possible
-        {
-            tryVerticalAttach = !(possibleHorizontalAttach.Count > 0); // Try vertical only if horizontal isn't possible
-        }
+        if (stemW >= stemH) { tryVerticalAttach = possibleVerticalAttach.Count > 0; }
+        else { tryVerticalAttach = !(possibleHorizontalAttach.Count > 0); }
         // If preferred direction failed, try the other one if possible
         if (tryVerticalAttach && possibleVerticalAttach.Count == 0) tryVerticalAttach = false;
         if (!tryVerticalAttach && possibleHorizontalAttach.Count == 0) tryVerticalAttach = true;
@@ -347,22 +363,13 @@ public class HybridLevelGenerator : MonoBehaviour
             bool attachAbove = possibleVerticalAttach[pseudoRandom.Next(possibleVerticalAttach.Count)] == 1;
             int availableSpace = attachAbove ? spaceAbove : spaceBelow;
 
-            // *** FIX for Random Range Error ***
-            // Ensure valid range for random height calculation
-            if (availableSpace < minLegSize)
-            {
-                Debug.LogWarning($"L-Shape Logic Warning: Vertical availableSpace ({availableSpace}) < minLegSize ({minLegSize}). Skipping leg.");
-                return false; // Cannot place leg if space is less than minimum size
-            }
+            if (availableSpace < minLegSize) { return false; } // Safety check
             legH = pseudoRandom.Next(minLegSize, availableSpace + 1);
-            // legH = Mathf.Max(minLegSize, Mathf.Min(legH, pseudoRandom.Next(minRoomSize, availableSpace + 1))); // REMOVED Complex/Buggy line
 
             legW = (int)(stemW * pseudoRandom.Next((int)(minLLegRatio * 100), (int)(maxLLegRatio * 100) + 1) / 100f);
-            legW = Mathf.Clamp(legW, minLegSize, stemW); // Leg width cannot exceed stem width
+            legW = Mathf.Clamp(legW, minLegSize, stemW);
 
-            int maxLegXOffset = stemW - legW;
-            // Ensure maxLegXOffset is not negative if legW became larger than stemW (shouldn't happen with clamp)
-            maxLegXOffset = Mathf.Max(0, maxLegXOffset);
+            int maxLegXOffset = Mathf.Max(0, stemW - legW);
             legX = stemRect.x + pseudoRandom.Next(0, maxLegXOffset + 1);
             legY = attachAbove ? stemRect.yMax : stemRect.yMin - legH;
         }
@@ -371,28 +378,18 @@ public class HybridLevelGenerator : MonoBehaviour
             bool attachRight = possibleHorizontalAttach[pseudoRandom.Next(possibleHorizontalAttach.Count)] == 1;
             int availableSpace = attachRight ? spaceRight : spaceLeft;
 
-            // *** FIX for Random Range Error ***
-            // Ensure valid range for random width calculation
-            if (availableSpace < minLegSize)
-            {
-                Debug.LogWarning($"L-Shape Logic Warning: Horizontal availableSpace ({availableSpace}) < minLegSize ({minLegSize}). Skipping leg.");
-                return false; // Cannot place leg if space is less than minimum size
-            }
+            if (availableSpace < minLegSize) { return false; } // Safety check
             legW = pseudoRandom.Next(minLegSize, availableSpace + 1);
-            // legW = Mathf.Max(minLegSize, Mathf.Min(legW, pseudoRandom.Next(minRoomSize, availableSpace + 1))); // REMOVED Complex/Buggy line
 
             legH = (int)(stemH * pseudoRandom.Next((int)(minLLegRatio * 100), (int)(maxLLegRatio * 100) + 1) / 100f);
-            legH = Mathf.Clamp(legH, minLegSize, stemH); // Leg height cannot exceed stem height
+            legH = Mathf.Clamp(legH, minLegSize, stemH);
 
-            int maxLegYOffset = stemH - legH;
-            // Ensure maxLegYOffset is not negative
-            maxLegYOffset = Mathf.Max(0, maxLegYOffset);
+            int maxLegYOffset = Mathf.Max(0, stemH - legH);
             legY = stemRect.y + pseudoRandom.Next(0, maxLegYOffset + 1);
             legX = attachRight ? stemRect.xMax : stemRect.xMin - legW;
         }
 
-        // *** BUG FIX 1: Final check uses calculated legW/legH ***
-        // This check should now be mostly redundant due to calculating based on availableSpace, but keep as safety
+        // Final check uses calculated legW/legH
         if (legW < minLegSize || legH < minLegSize)
         {
             Debug.LogError($"L-Shape Logic Error: Final calculated leg size invalid ({legW}x{legH}). Min required: {minLegSize}. This should not happen.");
@@ -416,6 +413,101 @@ public class HybridLevelGenerator : MonoBehaviour
         }
 
         return true; // L-shape successfully calculated
+    }
+
+    // --- NEW HELPER: Try placing a room template from prefab (WITH TRY-FINALLY) ---
+    private bool TryPlaceRoomTemplate(RectInt leaf, out RectInt placedBounds)
+    {
+        placedBounds = RectInt.zero;
+        if (roomTemplatePrefabs == null || roomTemplatePrefabs.Count == 0) return false;
+
+        // --- Select a random template ---
+        GameObject selectedTemplatePrefab = roomTemplatePrefabs[pseudoRandom.Next(roomTemplatePrefabs.Count)];
+        if (selectedTemplatePrefab == null)
+        {
+            Debug.LogWarning("Null entry found in roomTemplatePrefabs list.");
+            return false;
+        }
+
+        GameObject tempInstance = null; // Declare outside try
+        try // Use try-finally to ensure cleanup
+        {
+            // --- Instantiate temporarily to read data ---
+            tempInstance = Instantiate(selectedTemplatePrefab, new Vector3(9999, 9999, 0), Quaternion.identity);
+            tempInstance.SetActive(false);
+
+            Tilemap templateTilemap = tempInstance.GetComponentInChildren<Tilemap>();
+            if (templateTilemap == null)
+            {
+                Debug.LogError($"Room template prefab '{selectedTemplatePrefab.name}' is missing a Tilemap component in its children!", selectedTemplatePrefab);
+                return false; // Exit before cleanup
+            }
+
+            // --- Get Template Dimensions ---
+            templateTilemap.CompressBounds();
+            BoundsInt templateCellBounds = templateTilemap.cellBounds;
+            int templateWidth = templateCellBounds.size.x;
+            int templateHeight = templateCellBounds.size.y;
+
+            // --- Check if template fits in the leaf ---
+            int padding = (int)roomPadding;
+            int availableWidth = leaf.width - (2 * padding);
+            int availableHeight = leaf.height - (2 * padding);
+
+            if (templateWidth > availableWidth || templateHeight > availableHeight)
+            {
+                // Debug.Log($"Template '{selectedTemplatePrefab.name}' ({templateWidth}x{templateHeight}) too large for leaf {leaf} available space ({availableWidth}x{availableHeight}).");
+                return false; // Exit before cleanup
+            }
+
+            // --- Calculate Placement Position ---
+            int placeOffsetX = pseudoRandom.Next(0, availableWidth - templateWidth + 1);
+            int placeOffsetY = pseudoRandom.Next(0, availableHeight - templateHeight + 1);
+            int gridStartX = leaf.x + padding + placeOffsetX;
+            int gridStartY = leaf.y + padding + placeOffsetY;
+
+            // --- Copy Tile Data from Template to Main Grid ---
+            bool copiedAnyFloor = false;
+            foreach (Vector3Int localPos in templateCellBounds.allPositionsWithin)
+            {
+                TileBase tile = templateTilemap.GetTile(localPos);
+                if (tile != null)
+                {
+                    int gridX = gridStartX + localPos.x - templateCellBounds.xMin;
+                    int gridY = gridStartY + localPos.y - templateCellBounds.yMin;
+
+                    if (gridX >= 0 && gridX < levelWidth && gridY >= 0 && gridY < levelHeight)
+                    {
+                        TileType typeToPlace = TileType.Empty;
+                        if (tile == floorTile) { typeToPlace = TileType.Floor; copiedAnyFloor = true; }
+                        else if (tile == wallTile) { typeToPlace = TileType.Wall; }
+
+                        if (typeToPlace != TileType.Empty) { grid[gridX, gridY] = typeToPlace; }
+                    }
+                }
+            }
+
+            // --- Final checks and output ---
+            if (!copiedAnyFloor)
+            {
+                Debug.LogWarning($"Placed template '{selectedTemplatePrefab.name}' but it contained no Floor tiles matching the generator's Floor Tile reference.");
+                // return false; // Optional: uncomment to treat as failure if floor is mandatory
+            }
+
+            placedBounds = new RectInt(gridStartX, gridStartY, templateWidth, templateHeight);
+            rooms.Add(placedBounds);
+            return true; // Template successfully placed
+        }
+        finally // This block ALWAYS executes
+        {
+            // --- Clean up temporary instance ---
+            if (tempInstance != null)
+            {
+                // Use DestroyImmediate in editor mode, Destroy in play mode
+                if (Application.isPlaying) { Destroy(tempInstance); }
+                else { DestroyImmediate(tempInstance); }
+            }
+        }
     }
 
 
