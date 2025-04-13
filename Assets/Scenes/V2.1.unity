@@ -1430,6 +1430,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d94a319dab8d3284d983c4def114753e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  generationMode: 2
+  levelDesignJson: {fileID: 0}
   levelWidth: 50
   levelHeight: 50
   minRoomSize: 8
@@ -1440,13 +1442,14 @@ MonoBehaviour:
   maxLLegRatio: 0.767
   roomTemplatePrefabs:
   - {fileID: 6718998220024841746, guid: e4808451890a5b94daf38c184dfaf3b4, type: 3}
-  roomTemplateProbability: 0.924
+  - {fileID: 7043603121092860813, guid: dde2c204afdbb9a49b0c45a55ac5cdd3, type: 3}
+  roomTemplateProbability: 0.32
   corridorWidth: 2
   groundTilemap: {fileID: 59786515}
   wallTilemap: {fileID: 1521400880}
   floorTile: {fileID: 11400000, guid: 3f5b5b050a99feb4e98a954f647d17e6, type: 2}
   wallTile: {fileID: 11400000, guid: fd1a932b63d942046be33904a6e02fc0, type: 2}
-  seed: 191020328
+  seed: 196881203
   useRandomSeed: 1
   playerPrefab: {fileID: 3548798236488958899, guid: 233e123314ae4e948bcc465afc76dfb9, type: 3}
   enemyPrefab: {fileID: 7773039407867173279, guid: a722c0378e102014a9dfbe64ebc335bf, type: 3}
