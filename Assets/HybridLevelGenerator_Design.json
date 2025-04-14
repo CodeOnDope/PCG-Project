@@ -1,0 +1,48 @@
+{
+    "nodes": [
+        {
+            "id": "NewRoom_1",
+            "displayName": "New Room",
+            "nodeType": 0,
+            "x": 189.60000610351563,
+            "y": 226.20001220703126,
+            "width": 10,
+            "height": 10,
+            "templateName": ""
+        },
+        {
+            "id": "NewRoom_2",
+            "displayName": "New Room",
+            "nodeType": 0,
+            "x": 385.6000061035156,
+            "y": 223.0,
+            "width": 10,
+            "height": 10,
+            "templateName": ""
+        },
+        {
+            "id": "NewRoom_3",
+            "displayName": "New Room",
+            "nodeType": 0,
+            "x": 272.0,
+            "y": 400.6000061035156,
+            "width": 10,
+            "height": 10,
+            "templateName": ""
+        }
+    ],
+    "connections": [
+        {
+            "fromId": "NewRoom_1",
+            "toId": "NewRoom_2"
+        },
+        {
+            "fromId": "NewRoom_2",
+            "toId": "NewRoom_3"
+        },
+        {
+            "fromId": "NewRoom_3",
+            "toId": "NewRoom_1"
+        }
+    ]
+}

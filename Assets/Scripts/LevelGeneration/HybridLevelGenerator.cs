@@ -1,0 +1,382 @@
+﻿using UnityEngine;
+using UnityEngine.Tilemaps;
+using System.Collections.Generic;
+using System; // Required for System.Random
+using System.Linq;
+
+// Note: Assumes GenerationMode, NodeType, TileType enums are defined
+// in a separate accessible file like LevelGenerationData.cs (or levelgenerationtype.cs)
+// Make sure GenerationMode ONLY contains FullyProcedural and HybridProcedural
+
+public class HybridLevelGenerator : MonoBehaviour
+{
+    [Header("--- Generation Mode ---")]
+    [Tooltip("Select the generation method:\n" +
+             "FullyProcedural: BSP splits, random Rect rooms, procedural corridors.\n" +
+             "HybridProcedural: BSP splits, random Templates/L-Shapes/Rects, procedural corridors.")]
+    public GenerationMode generationMode = GenerationMode.HybridProcedural;
+
+    // Removed Level Design Input section
+
+    [Header("Level Dimensions (Max Bounds)")]
+    public int levelWidth = 100;
+    public int levelHeight = 100;
+
+    [Header("BSP Settings")] // Used by both modes
+    public int minRoomSize = 8;
+    public int maxIterations = 5;
+    public float roomPadding = 2f;
+
+    [Header("Room Shape Settings (Hybrid & Scene Modes)")]
+    [Tooltip("The chance (0-1) a procedural room attempts L-shape (Hybrid Mode).")]
+    [Range(0f, 1f)] public float lShapeProbability = 0.3f;
+    [Range(0.3f, 0.8f)] public float minLLegRatio = 0.4f;
+    [Range(0.5f, 1.0f)] public float maxLLegRatio = 0.7f;
+    [Tooltip("Default size used for Rect/LShape nodes in UserDefinedLayout mode if not specified on RoomNode.")]
+    public Vector2Int defaultSceneNodeSize = new Vector2Int(10, 10);
+
+
+    [Header("Room Template Settings (Hybrid Mode)")]
+    [Tooltip("Prefabs with Tilemaps for room layouts (Used in Hybrid mode).")]
+    public List<GameObject> roomTemplatePrefabs;
+    [Tooltip("The chance (0-1) a procedural room attempts Template (Hybrid Mode).")]
+    [Range(0f, 1f)] public float roomTemplateProbability = 0.2f;
+
+    [Header("Corridor Settings")]
+    public int corridorWidth = 1;
+
+    [Header("Tilemaps & Tiles")]
+    public Tilemap groundTilemap;
+    public Tilemap wallTilemap;
+    public TileBase floorTile;
+    public TileBase wallTile;
+
+    [Header("Randomness")]
+    public int seed = 0;
+    public bool useRandomSeed = true;
+
+    [Header("Entities & Decorations")]
+    public GameObject playerPrefab;
+    public GameObject enemyPrefab;
+    public GameObject decorationPrefab;
+    public int enemiesPerRoom = 2;
+    public int decorationsPerRoom = 3;
+
+    [Header("Editor Preview")]
+    [Tooltip("Assign a Render Texture asset here. A Camera in the scene should target this texture.")]
+    public RenderTexture levelPreviewTexture;
+
+    // --- Internal Data ---
+    private TileType[,] grid;
+    private List<RectInt> bspLeaves;
+    private Dictionary<string, RectInt> placedRoomBounds = new Dictionary<string, RectInt>();
+    private System.Random pseudoRandom;
+
+    // Parent Transform References
+    private Transform playerHolder;
+    private Transform enemiesHolder;
+    private Transform decorationsHolder;
+
+    // --- Public Methods ---
+
+    [ContextMenu("Generate Level")]
+    public void GenerateLevel()
+    {
+        Debug.Log($"--- Starting Level Generation (Mode: {generationMode}) ---");
+        ClearLevel(); Initialize();
+        if (grid == null || pseudoRandom == null || placedRoomBounds == null || playerHolder == null || enemiesHolder == null || decorationsHolder == null) { Debug.LogError("Initialization failed!", this); return; }
+        if (floorTile == null || wallTile == null) { Debug.LogError("Floor Tile or Wall Tile is not assigned!", this); return; }
+        if (groundTilemap == null || wallTilemap == null) { Debug.LogError("Ground or Wall Tilemap is not assigned!", this); return; }
+        bool generationSuccess = false;
+        switch (generationMode)
+        {
+            case GenerationMode.FullyProcedural: generationSuccess = GenerateProceduralLevel(); break;
+            case GenerationMode.HybridProcedural: generationSuccess = GenerateHybridLevel(); break;
+            case GenerationMode.UserDefinedLayout: generationSuccess = GenerateFromSceneLayout(); break;
+        }
+        if (generationSuccess)
+        {
+            ApplyTilesToTilemap();
+            SpawnEntities();
+            Debug.Log($"--- Level Generation Complete --- Seed: {seed}. Rooms placed: {placedRoomBounds?.Count ?? 0}.");
+        }
+        else
+        {
+            Debug.LogError($"--- Level Generation FAILED (Mode: {generationMode}) --- Check previous logs for details.");
+        }
+    }
+    [ContextMenu("Clear Level")]
+    public void ClearLevel()
+    {
+        Debug.Log("Clearing level..."); if (groundTilemap != null) groundTilemap.ClearAllTiles(); if (wallTilemap != null) wallTilemap.ClearAllTiles(); DestroyChildren("PlayerHolder"); DestroyChildren("EnemiesHolder"); DestroyChildren("DecorationsHolder"); grid = null; bspLeaves = null; if (placedRoomBounds != null) placedRoomBounds.Clear(); else placedRoomBounds = new Dictionary<string, RectInt>(); Debug.Log("Level cleared.");
+    }
+    private void Initialize()
+    {
+        if (useRandomSeed || seed == 0) { seed = Environment.TickCount; }
+        pseudoRandom = new System.Random(seed); Debug.Log($"Using Seed: {seed}"); grid = new TileType[levelWidth, levelHeight]; for (int x = 0; x < levelWidth; x++) { for (int y = 0; y < levelHeight; y++) { grid[x, y] = TileType.Wall; } }
+        bspLeaves = new List<RectInt>(); placedRoomBounds = new Dictionary<string, RectInt>(); playerHolder = CreateOrFindParent("PlayerHolder"); enemiesHolder = CreateOrFindParent("EnemiesHolder"); decorationsHolder = CreateOrFindParent("DecorationsHolder");
+    }
+
+    // --- Mode-Specific Generation Pipelines ---
+    private bool GenerateProceduralLevel() { RunBSPSplit(); CreateRoomsInLeaves_Procedural(); if (placedRoomBounds.Count < 2) { Debug.LogWarning("Less than 2 rooms generated, skipping corridor generation."); } else { CreateCorridors_Procedural(); } return placedRoomBounds.Count > 0; }
+    private bool GenerateHybridLevel() { RunBSPSplit(); CreateRoomsInLeaves_Hybrid(); if (placedRoomBounds.Count < 2) { Debug.LogWarning("Less than 2 rooms generated, skipping corridor generation."); } else { CreateCorridors_Procedural(); } return placedRoomBounds.Count > 0; }
+
+    // --- Generate from Scene Layout (RESTORED LOGIC + LOGGING) ---
+    private bool GenerateFromSceneLayout()
+    {
+        Debug.Log("[GenerateFromSceneLayout] Function Entered.");
+        placedRoomBounds.Clear();
+        RoomNode[] roomNodes = FindObjectsOfType<RoomNode>();
+
+        if (roomNodes == null || roomNodes.Length == 0)
+        {
+            Debug.LogError("[GenerateFromSceneLayout] FAILED: No RoomNode components found in the scene!");
+            return false;
+        }
+
+        Debug.Log($"[GenerateFromSceneLayout] Found {roomNodes.Length} RoomNode components.");
+        int successfullyPlacedCount = 0;
+
+        // --- Phase 1: Place Rooms ---
+        Debug.Log("[GenerateFromSceneLayout] Starting Room Placement Phase..."); // RESTORED
+        foreach (RoomNode node in roomNodes)
+        {
+            Vector3 nodeWorldPos = node.transform.position;
+            Debug.Log($"Processing Node: {node.gameObject.name} (ID: '{node.roomId}', Type: {node.roomType}, ScenePos: {nodeWorldPos:F2})");
+            if (string.IsNullOrEmpty(node.roomId)) { Debug.LogWarning($"-- Skipping Node {node.gameObject.name}: Room Id is missing."); continue; }
+            if (placedRoomBounds.ContainsKey(node.roomId)) { Debug.LogWarning($"-- Skipping Node {node.gameObject.name}: Duplicate Room Id '{node.roomId}' already exists."); continue; }
+
+            RectInt roomBounds = RectInt.zero;
+            bool created = false;
+            Vector2Int nodeSize = node.roomSize.x > 0 && node.roomSize.y > 0 ? node.roomSize : defaultSceneNodeSize;
+
+            int centerX = levelWidth / 2 + Mathf.FloorToInt(nodeWorldPos.x);
+            int centerY = levelHeight / 2 + Mathf.FloorToInt(nodeWorldPos.y);
+            Vector2Int targetCenterPos = new Vector2Int(centerX, centerY);
+            Debug.Log($"-- Calculated Target Grid Center: {targetCenterPos}");
+
+            switch (node.roomType)
+            {
+                case NodeType.Rect:
+                    roomBounds = new RectInt(targetCenterPos.x - nodeSize.x / 2, targetCenterPos.y - nodeSize.y / 2, nodeSize.x, nodeSize.y);
+                    Debug.Log($"-- Attempting to carve Rect. Calculated Bounds: {roomBounds}");
+                    CarveRectangle(roomBounds, TileType.Floor);
+                    created = true;
+                    break;
+                case NodeType.LShape:
+                    if (TryCreateLShapeAt(targetCenterPos, nodeSize, out RectInt stemRect, out RectInt legRect, out roomBounds))
+                    {
+                        Debug.Log($"-- Attempting to carve L-Shape. Stem={stemRect}, Leg={legRect}, Overall Bounds={roomBounds}");
+                        CarveRectangle(stemRect, TileType.Floor);
+                        CarveRectangle(legRect, TileType.Floor);
+                        created = true;
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"-- Failed to create L-Shape geometry for node {node.roomId}. Placing rectangle fallback centered at {targetCenterPos}.");
+                        roomBounds = new RectInt(targetCenterPos.x - nodeSize.x / 2, targetCenterPos.y - nodeSize.y / 2, nodeSize.x, nodeSize.y);
+                        CarveRectangle(roomBounds, TileType.Floor); created = true;
+                    }
+                    break;
+                case NodeType.Template:
+                    GameObject templatePrefab = node.roomTemplatePrefab;
+                    if (templatePrefab != null)
+                    {
+                        if (GetTemplateDimensions(templatePrefab, out int tW, out int tH))
+                        {
+                            Vector2Int bottomLeft = new Vector2Int(targetCenterPos.x - tW / 2, targetCenterPos.y - tH / 2);
+                            Debug.Log($"-- Attempting to place template '{templatePrefab.name}' at BL: {bottomLeft} size {tW}x{tH}");
+                            if (PlaceSpecificRoomTemplate(templatePrefab, bottomLeft, out roomBounds)) { created = true; }
+                            else { Debug.LogWarning($"-- Failed to place template '{templatePrefab.name}' for node {node.roomId} near {targetCenterPos}. Bounds check failed?"); }
+                        }
+                        else { Debug.LogWarning($"-- Could not get dimensions for template prefab on node {node.roomId}."); }
+                    }
+                    else { Debug.LogWarning($"-- Skipping Node {node.roomId}: Template prefab not assigned."); }
+                    break;
+            }
+
+            if (created)
+            {
+                bool overlaps = false; foreach (var kvp in placedRoomBounds) { if (kvp.Key != node.roomId && kvp.Value.Overlaps(roomBounds)) { Debug.LogWarning($"-- Overlap detected between room {node.roomId} ({roomBounds}) and room {kvp.Key} ({kvp.Value})"); overlaps = true; } }
+                placedRoomBounds[node.roomId] = roomBounds;
+                successfullyPlacedCount++;
+                Debug.Log($"-- Placed room for node {node.roomId}. Final Bounds: {roomBounds}");
+            }
+            else
+            {
+                Debug.LogWarning($"-- Failed to create/place room for node {node.roomId} (Type: {node.roomType}).");
+            }
+        } // End foreach node
+
+        // Check if any rooms were actually placed
+        if (successfullyPlacedCount < 1)
+        { // RESTORED
+            Debug.LogError("GenerateFromSceneLayout FAILED: No rooms were successfully placed.");
+            return false;
+        }
+        Debug.Log($"[GenerateFromSceneLayout] Finished Room Placement. Successfully placed: {successfullyPlacedCount}"); // RESTORED
+
+        // --- Phase 2: Create Connections ---
+        if (successfullyPlacedCount < 2)
+        { // RESTORED
+            Debug.LogWarning("GenerateFromSceneLayout: Only one room placed, skipping corridor generation.");
+        }
+        else
+        { // RESTORED
+            Debug.Log("[GenerateFromSceneLayout] Starting Connection Phase..."); // RESTORED
+            HashSet<Tuple<string, string>> createdConnections = new HashSet<Tuple<string, string>>();
+            int connectionCount = 0;
+            foreach (RoomNode node in roomNodes)
+            { // RESTORED Loop
+                if (string.IsNullOrEmpty(node.roomId) || !placedRoomBounds.ContainsKey(node.roomId)) continue;
+                RectInt fromBounds = placedRoomBounds[node.roomId];
+                if (node.connectedRooms != null)
+                {
+                    foreach (RoomNode connectedNode in node.connectedRooms)
+                    {
+                        if (connectedNode != null && !string.IsNullOrEmpty(connectedNode.roomId) && placedRoomBounds.ContainsKey(connectedNode.roomId))
+                        {
+                            RectInt toBounds = placedRoomBounds[connectedNode.roomId];
+                            if (node.roomId == connectedNode.roomId) continue;
+                            var connectionPair1 = Tuple.Create(node.roomId, connectedNode.roomId);
+                            var connectionPair2 = Tuple.Create(connectedNode.roomId, node.roomId);
+                            if (!createdConnections.Contains(connectionPair1) && !createdConnections.Contains(connectionPair2))
+                            {
+                                Debug.Log($"-- Connecting {node.roomId} ({fromBounds.center}) to {connectedNode.roomId} ({toBounds.center})");
+                                ConnectRects(fromBounds, toBounds);
+                                createdConnections.Add(connectionPair1);
+                                connectionCount++;
+                            }
+                        }
+                        else if (connectedNode != null) { Debug.LogWarning($"-- Node {node.roomId} connected to {connectedNode.gameObject.name}, but target has no valid ID/placement."); }
+                    }
+                }
+            } // End foreach connection loop // RESTORED
+            Debug.Log($"[GenerateFromSceneLayout] Finished Connections. Created {connectionCount} connections."); // RESTORED
+        } // End else for connection // RESTORED
+
+        // Removed temporary debug warning and return true
+        Debug.Log($"[GenerateFromSceneLayout] Finished. Successfully placed {successfullyPlacedCount} rooms.");
+        return true; // Return true if at least one room was placed successfully
+    }
+
+
+    // --- Room Creation Logic (Procedural - Rect Only) ---
+    private void CreateRoomsInLeaves_Procedural() { if (bspLeaves == null) { Debug.LogError("BSP leaves not generated!"); return; } placedRoomBounds.Clear(); for (int i = 0; i < bspLeaves.Count; i++) { RectInt leaf = bspLeaves[i]; if (TryCreateRectangleInLeaf(leaf, out RectInt roomBounds)) { CarveRectangle(roomBounds, TileType.Floor); string roomId = $"Room_{i}"; placedRoomBounds[roomId] = roomBounds; } } Debug.Log($"Procedural room creation complete. Rooms generated: {placedRoomBounds.Count}"); }
+    // --- Room Creation Logic (Hybrid - Templates, L-Shapes, Rects) ---
+    private void CreateRoomsInLeaves_Hybrid() { if (bspLeaves == null) { Debug.LogError("BSP leaves not generated!"); return; } placedRoomBounds.Clear(); for (int i = 0; i < bspLeaves.Count; i++) { RectInt leaf = bspLeaves[i]; RectInt roomBounds = RectInt.zero; bool roomCreated = false; string roomId = $"Room_{i}"; if (roomTemplatePrefabs != null && roomTemplatePrefabs.Count > 0 && pseudoRandom.NextDouble() < roomTemplateProbability) { if (TryPlaceRoomTemplate(leaf, roomId, out roomBounds)) { roomCreated = true; } } if (!roomCreated && pseudoRandom.NextDouble() < lShapeProbability) { if (TryCreateLShapeInLeaf(leaf, out RectInt stemRect, out RectInt legRect, out roomBounds)) { CarveRectangle(stemRect, TileType.Floor); CarveRectangle(legRect, TileType.Floor); placedRoomBounds[roomId] = roomBounds; roomCreated = true; } } if (!roomCreated) { if (TryCreateRectangleInLeaf(leaf, out roomBounds)) { CarveRectangle(roomBounds, TileType.Floor); placedRoomBounds[roomId] = roomBounds; roomCreated = true; } } } Debug.Log($"Hybrid room creation complete. Rooms generated: {placedRoomBounds.Count}"); }
+    // Removed PlaceRoomsFromData()
+    // --- Corridor Creation (Procedural - MST) ---
+    private void CreateCorridors_Procedural() { if (placedRoomBounds == null || placedRoomBounds.Count < 2) return; List<RectInt> roomBoundsList = new List<RectInt>(placedRoomBounds.Values); List<RectInt> connectedSet = new List<RectInt>(); List<RectInt> unconnectedSet = new List<RectInt>(roomBoundsList); RectInt startRoom = unconnectedSet[pseudoRandom.Next(unconnectedSet.Count)]; connectedSet.Add(startRoom); unconnectedSet.Remove(startRoom); while (unconnectedSet.Count > 0) { RectInt closestUnconnected = default; RectInt closestConnected = default; float minDistance = float.MaxValue; foreach (RectInt connectedRoom in connectedSet) { foreach (RectInt unconnectedRoom in unconnectedSet) { float dist = Vector2.Distance(connectedRoom.center, unconnectedRoom.center); if (dist < minDistance) { minDistance = dist; closestUnconnected = unconnectedRoom; closestConnected = connectedRoom; } } } if (closestUnconnected != default && closestConnected != default) { ConnectRects(closestConnected, closestUnconnected); connectedSet.Add(closestUnconnected); unconnectedSet.Remove(closestUnconnected); } else { Debug.LogError("Failed to find closest room pair for corridor connection. Breaking loop."); break; } } }
+    // Removed CreateCorridorsFromData()
+    // --- Spawning Logic ---
+    private void SpawnEntities() { if (placedRoomBounds == null || placedRoomBounds.Count == 0) return; bool playerSpawned = false; foreach (var kvp in placedRoomBounds) { RectInt currentRoomBounds = kvp.Value; string roomId = kvp.Key; List<Vector2Int> floorSpots = GetFloorTilesInRect(currentRoomBounds); if (floorSpots.Count == 0) continue; if (!playerSpawned && playerPrefab != null) { Vector2Int spawnTile = floorSpots[pseudoRandom.Next(floorSpots.Count)]; Vector3 spawnPos = GetWorldPosition(spawnTile); Instantiate(playerPrefab, spawnPos, Quaternion.identity, playerHolder); playerSpawned = true; floorSpots.Remove(spawnTile); Debug.Log($"Player spawned in room {roomId} at {spawnTile}"); } SpawnPrefabs(enemyPrefab, enemiesPerRoom, floorSpots, enemiesHolder); SpawnPrefabs(decorationPrefab, decorationsPerRoom, floorSpots, decorationsHolder); } if (!playerSpawned && playerPrefab != null) { Debug.LogWarning("Player prefab assigned but failed to spawn!"); } }
+    private void SpawnPrefabs(GameObject prefab, int count, List<Vector2Int> availableSpots, Transform parentHolder) { if (prefab == null || availableSpots == null || parentHolder == null || availableSpots.Count == 0) return; int numToSpawn = Mathf.Min(count, availableSpots.Count); for (int i = 0; i < numToSpawn; i++) { if (availableSpots.Count == 0) break; int spotIndex = pseudoRandom.Next(availableSpots.Count); Vector2Int spawnTilePos = availableSpots[spotIndex]; availableSpots.RemoveAt(spotIndex); Vector3 worldPos = GetWorldPosition(spawnTilePos); Instantiate(prefab, worldPos, Quaternion.identity, parentHolder); } }
+    // --- Room Generation Helpers ---
+    private bool TryCreateRectangleInLeaf(RectInt leaf, out RectInt roomRect) { roomRect = RectInt.zero; int padding = (int)roomPadding; int maxRoomWidth = leaf.width - (2 * padding); int maxRoomHeight = leaf.height - (2 * padding); if (maxRoomWidth < minRoomSize || maxRoomHeight < minRoomSize) return false; int roomWidth = pseudoRandom.Next(minRoomSize, maxRoomWidth + 1); int roomHeight = pseudoRandom.Next(minRoomSize, maxRoomHeight + 1); int roomX = leaf.x + padding + pseudoRandom.Next(0, maxRoomWidth - roomWidth + 1); int roomY = leaf.y + padding + pseudoRandom.Next(0, maxRoomHeight - roomHeight + 1); roomRect = new RectInt(roomX, roomY, roomWidth, roomHeight); return true; }
+    private bool TryCreateLShapeInLeaf(RectInt leaf, out RectInt stemRect, out RectInt legRect, out RectInt overallBounds) { stemRect = legRect = overallBounds = RectInt.zero; int padding = (int)roomPadding; int availableWidth = leaf.width - (2 * padding); int availableHeight = leaf.height - (2 * padding); int minLegSize = 1; if (availableWidth < minRoomSize || availableHeight < minRoomSize) { return false; } int stemW = pseudoRandom.Next(minRoomSize, availableWidth + 1); int stemH = pseudoRandom.Next(minRoomSize, availableHeight + 1); int maxStemX = availableWidth - stemW; int maxStemY = availableHeight - stemH; if (maxStemX < 0 || maxStemY < 0) { return false; } int stemRelX = pseudoRandom.Next(0, maxStemX + 1); int stemRelY = pseudoRandom.Next(0, maxStemY + 1); stemRect = new RectInt(leaf.x + padding + stemRelX, leaf.y + padding + stemRelY, stemW, stemH); RectInt paddedLeafBounds = new RectInt(leaf.x + padding, leaf.y + padding, availableWidth, availableHeight); int spaceAbove = paddedLeafBounds.yMax - stemRect.yMax; int spaceBelow = stemRect.yMin - paddedLeafBounds.yMin; int spaceRight = paddedLeafBounds.xMax - stemRect.xMax; int spaceLeft = stemRect.xMin - paddedLeafBounds.xMin; bool canAttachAbove = spaceAbove >= minLegSize; bool canAttachBelow = spaceBelow >= minLegSize; bool canAttachRight = spaceRight >= minLegSize; bool canAttachLeft = spaceLeft >= minLegSize; List<int> possibleVerticalAttach = new List<int>(); if (canAttachBelow) possibleVerticalAttach.Add(0); if (canAttachAbove) possibleVerticalAttach.Add(1); List<int> possibleHorizontalAttach = new List<int>(); if (canAttachLeft) possibleHorizontalAttach.Add(0); if (canAttachRight) possibleHorizontalAttach.Add(1); if (possibleVerticalAttach.Count == 0 && possibleHorizontalAttach.Count == 0) { return false; } bool tryVerticalAttach; if (stemW >= stemH) { tryVerticalAttach = possibleVerticalAttach.Count > 0; } else { tryVerticalAttach = !(possibleHorizontalAttach.Count > 0); } if (tryVerticalAttach && possibleVerticalAttach.Count == 0) tryVerticalAttach = false; if (!tryVerticalAttach && possibleHorizontalAttach.Count == 0) tryVerticalAttach = true; int legW, legH, legX, legY; if (tryVerticalAttach) { bool attachAbove = possibleVerticalAttach[pseudoRandom.Next(possibleVerticalAttach.Count)] == 1; int availableSpace = attachAbove ? spaceAbove : spaceBelow; if (availableSpace < minLegSize) { return false; } legH = pseudoRandom.Next(minLegSize, availableSpace + 1); legW = (int)(stemW * pseudoRandom.Next((int)(minLLegRatio * 100), (int)(maxLLegRatio * 100) + 1) / 100f); legW = Mathf.Clamp(legW, minLegSize, stemW); int maxLegXOffset = Mathf.Max(0, stemW - legW); legX = stemRect.x + pseudoRandom.Next(0, maxLegXOffset + 1); legY = attachAbove ? stemRect.yMax : stemRect.yMin - legH; } else { bool attachRight = possibleHorizontalAttach[pseudoRandom.Next(possibleHorizontalAttach.Count)] == 1; int availableSpace = attachRight ? spaceRight : spaceLeft; if (availableSpace < minLegSize) { return false; } legW = pseudoRandom.Next(minLegSize, availableSpace + 1); legH = (int)(stemH * pseudoRandom.Next((int)(minLLegRatio * 100), (int)(maxLLegRatio * 100) + 1) / 100f); legH = Mathf.Clamp(legH, minLegSize, stemH); int maxLegYOffset = Mathf.Max(0, stemH - legH); legY = stemRect.y + pseudoRandom.Next(0, maxLegYOffset + 1); legX = attachRight ? stemRect.xMax : stemRect.xMin - legW; } if (legW < minLegSize || legH < minLegSize) { return false; } legRect = new RectInt(legX, legY, legW, legH); int minX = Mathf.Min(stemRect.xMin, legRect.xMin); int minY = Mathf.Min(stemRect.yMin, legRect.yMin); int maxX = Mathf.Max(stemRect.xMax, legRect.xMax); int maxY = Mathf.Max(stemRect.yMax, legRect.yMax); overallBounds = new RectInt(minX, minY, maxX - minX, maxY - minY); if (overallBounds.xMin < leaf.xMin || overallBounds.yMin < leaf.yMin || overallBounds.xMax > leaf.xMax || overallBounds.yMax > leaf.yMax) { return false; } return true; }
+    private bool TryPlaceRoomTemplate(RectInt leaf, string roomId, out RectInt placedBounds) { placedBounds = RectInt.zero; if (roomTemplatePrefabs == null || roomTemplatePrefabs.Count == 0) return false; GameObject selectedTemplatePrefab = roomTemplatePrefabs[pseudoRandom.Next(roomTemplatePrefabs.Count)]; if (selectedTemplatePrefab == null) { Debug.LogWarning("Null entry found in roomTemplatePrefabs list."); return false; } GameObject tempInstance = null; try { tempInstance = Instantiate(selectedTemplatePrefab, new Vector3(9999, 9999, 0), Quaternion.identity); tempInstance.SetActive(false); Tilemap templateTilemap = tempInstance.GetComponentInChildren<Tilemap>(); if (templateTilemap == null) { Debug.LogError($"Template prefab '{selectedTemplatePrefab.name}' missing Tilemap!", selectedTemplatePrefab); return false; } templateTilemap.CompressBounds(); BoundsInt templateCellBounds = templateTilemap.cellBounds; int templateWidth = templateCellBounds.size.x; int templateHeight = templateCellBounds.size.y; int padding = (int)roomPadding; int availableWidth = leaf.width - (2 * padding); int availableHeight = leaf.height - (2 * padding); if (templateWidth > availableWidth || templateHeight > availableHeight) { return false; } int placeOffsetX = pseudoRandom.Next(0, availableWidth - templateWidth + 1); int placeOffsetY = pseudoRandom.Next(0, availableHeight - templateHeight + 1); int gridStartX = leaf.x + padding + placeOffsetX; int gridStartY = leaf.y + padding + placeOffsetY; bool copiedAnyFloor = false; foreach (Vector3Int localPos in templateCellBounds.allPositionsWithin) { TileBase tile = templateTilemap.GetTile(localPos); if (tile != null) { int gridX = gridStartX + localPos.x - templateCellBounds.xMin; int gridY = gridStartY + localPos.y - templateCellBounds.yMin; if (gridX >= 0 && gridX < levelWidth && gridY >= 0 && gridY < levelHeight) { TileType typeToPlace = TileType.Empty; if (tile == floorTile) { typeToPlace = TileType.Floor; copiedAnyFloor = true; } else if (tile == wallTile) { typeToPlace = TileType.Wall; } if (typeToPlace != TileType.Empty) { grid[gridX, gridY] = typeToPlace; } } } } if (!copiedAnyFloor) { Debug.LogWarning($"Placed template '{selectedTemplatePrefab.name}' contained no Floor tiles matching reference."); } placedBounds = new RectInt(gridStartX, gridStartY, templateWidth, templateHeight); placedRoomBounds[roomId] = placedBounds; return true; } finally { if (tempInstance != null) { if (Application.isPlaying) { Destroy(tempInstance); } else { DestroyImmediate(tempInstance); } } } }
+    private bool PlaceSpecificRoomTemplate(GameObject templatePrefab, Vector2Int targetGridPos, out RectInt placedBounds) { placedBounds = RectInt.zero; if (templatePrefab == null) return false; GameObject tempInstance = null; try { tempInstance = Instantiate(templatePrefab, new Vector3(9999, 9999, 0), Quaternion.identity); tempInstance.SetActive(false); Tilemap templateTilemap = tempInstance.GetComponentInChildren<Tilemap>(); if (templateTilemap == null) { Debug.LogError($"Template prefab '{templatePrefab.name}' missing Tilemap!", templatePrefab); return false; } templateTilemap.CompressBounds(); BoundsInt templateCellBounds = templateTilemap.cellBounds; int templateWidth = templateCellBounds.size.x; int templateHeight = templateCellBounds.size.y; int gridStartX = targetGridPos.x; int gridStartY = targetGridPos.y; if (gridStartX + templateWidth > levelWidth || gridStartY + templateHeight > levelHeight || gridStartX < 0 || gridStartY < 0) { Debug.LogWarning($"Template '{templatePrefab.name}' placement at {targetGridPos} size {templateWidth}x{templateHeight} exceeds level bounds {levelWidth}x{levelHeight}."); return false; } bool copiedAnyFloor = false; foreach (Vector3Int localPos in templateCellBounds.allPositionsWithin) { TileBase tile = templateTilemap.GetTile(localPos); if (tile != null) { int gridX = gridStartX + localPos.x - templateCellBounds.xMin; int gridY = gridStartY + localPos.y - templateCellBounds.yMin; if (gridX >= 0 && gridX < levelWidth && gridY >= 0 && gridY < levelHeight) { TileType typeToPlace = TileType.Empty; if (tile == floorTile) { typeToPlace = TileType.Floor; copiedAnyFloor = true; } else if (tile == wallTile) { typeToPlace = TileType.Wall; } if (typeToPlace != TileType.Empty) { grid[gridX, gridY] = typeToPlace; } } } } if (!copiedAnyFloor) { Debug.LogWarning($"Placed template '{templatePrefab.name}' contained no Floor tiles matching reference."); } placedBounds = new RectInt(gridStartX, gridStartY, templateWidth, templateHeight); return true; } finally { if (tempInstance != null) { if (Application.isPlaying) { Destroy(tempInstance); } else { DestroyImmediate(tempInstance); } } } }
+    // Removed FindTemplatePrefab
+    private bool GetTemplateDimensions(GameObject templatePrefab, out int width, out int height) { width = 0; height = 0; if (templatePrefab == null) return false; Tilemap tilemap = templatePrefab.GetComponentInChildren<Tilemap>(true); if (tilemap == null) return false; tilemap.CompressBounds(); BoundsInt bounds = tilemap.cellBounds; width = bounds.size.x; height = bounds.size.y; return width > 0 && height > 0; }
+    private bool TryCreateLShapeAt(Vector2Int centerPos, Vector2Int size, out RectInt stemRect, out RectInt legRect, out RectInt overallBounds) { stemRect = legRect = overallBounds = RectInt.zero; int minLegSize = 1; if (size.x < minRoomSize || size.y < minRoomSize) return false; int stemW = size.x; int stemH = Mathf.Max(minLegSize, Mathf.FloorToInt(size.y * 0.7f)); int legH = Mathf.Max(minLegSize, size.y - stemH); int legW = Mathf.Max(minLegSize, Mathf.FloorToInt(size.x * 0.5f)); int stemX = centerPos.x - stemW / 2; int stemY = centerPos.y - size.y / 2; stemRect = new RectInt(stemX, stemY, stemW, stemH); int legX = stemRect.xMax - legW; int legY = stemRect.yMax; legRect = new RectInt(legX, legY, legW, legH); if (stemRect.xMin < 0 || stemRect.xMax > levelWidth || stemRect.yMin < 0 || stemRect.yMax > levelHeight || legRect.xMin < 0 || legRect.xMax > levelWidth || legRect.yMin < 0 || legRect.yMax > levelHeight) { Debug.LogWarning($"L-Shape At {centerPos} failed bounds check. Stem:{stemRect} Leg:{legRect}"); return false; } int minX = Mathf.Min(stemRect.xMin, legRect.xMin); int minY = Mathf.Min(stemRect.yMin, legRect.yMin); int maxX = Mathf.Max(stemRect.xMax, legRect.xMax); int maxY = Mathf.Max(stemRect.yMax, legRect.yMax); overallBounds = new RectInt(minX, minY, maxX - minX, maxY - minY); return true; }
+
+    // --- Corridor Connection ---
+    private void ConnectRects(RectInt roomA, RectInt roomB) { Vector2Int centerA = Vector2Int.RoundToInt(roomA.center); Vector2Int centerB = Vector2Int.RoundToInt(roomB.center); if (pseudoRandom.Next(0, 2) == 0) { CarveCorridorSegment(centerA.x, centerB.x, centerA.y, true); CarveCorridorSegment(centerA.y, centerB.y, centerB.x, false); } else { CarveCorridorSegment(centerA.y, centerB.y, centerA.x, false); CarveCorridorSegment(centerA.x, centerB.x, centerB.y, true); } }
+    private void CarveCorridorSegment(int startCoord, int endCoord, int fixedCoord, bool isHorizontal)
+    { // *** ADDED LOGGING ***
+        if (grid == null) return;
+        // Debug.Log($"[CarveCorr] Carving {(isHorizontal?"Horiz":"Vert")} from {startCoord} to {endCoord} at fixed {(isHorizontal?"Y":"X")}={fixedCoord}");
+        int min = Mathf.Min(startCoord, endCoord); int max = Mathf.Max(startCoord, endCoord);
+        int halfWidth = corridorWidth <= 1 ? 0 : (corridorWidth - 1) / 2;
+        int tilesCarved = 0;
+        for (int i = min; i <= max; i++)
+        {
+            for (int w = -halfWidth; w <= halfWidth; w++)
+            {
+                int x, y;
+                if (isHorizontal) { x = i; y = fixedCoord + w; }
+                else { x = fixedCoord + w; y = i; }
+                if (x >= 0 && x < levelWidth && y >= 0 && y < levelHeight)
+                {
+                    if (grid[x, y] != TileType.Floor)
+                    {
+                        grid[x, y] = TileType.Floor;
+                        tilesCarved++;
+                    }
+                }
+            }
+        }
+        if (tilesCarved > 0) Debug.Log($"[CarveCorr] Carved {tilesCarved} floor tiles for segment between {startCoord} and {endCoord}.");
+    }
+
+    // --- Utility Functions ---
+    private void CarveRectangle(RectInt rect, TileType tile)
+    { // *** ADDED LOGGING & BOUNDS CHECK ***
+        if (grid == null) return;
+        int tilesCarved = 0;
+        bool outOfBounds = false;
+        // Debug.Log($"[CarveRect] Attempting to carve {rect} with {tile}");
+        for (int x = rect.xMin; x < rect.xMax; x++)
+        {
+            for (int y = rect.yMin; y < rect.yMax; y++)
+            {
+                if (x >= 0 && x < levelWidth && y >= 0 && y < levelHeight)
+                { // Check grid bounds
+                    if (grid[x, y] != tile)
+                    {
+                        grid[x, y] = tile;
+                        if (tile == TileType.Floor) tilesCarved++;
+                    }
+                }
+                else
+                {
+                    outOfBounds = true; // Mark if any part is out
+                }
+            }
+        }
+        if (outOfBounds)
+        {
+            Debug.LogWarning($"[CarveRect] Part of rect {rect} was outside grid bounds ({levelWidth}x{levelHeight}). No tiles carved outside bounds.");
+        }
+        if (tilesCarved > 0 && tile == TileType.Floor) Debug.Log($"[CarveRect] Carved {tilesCarved} {tile} tiles for {rect}.");
+    }
+    private List<Vector2Int> GetFloorTilesInRect(RectInt rect) { List<Vector2Int> floorTiles = new List<Vector2Int>(); if (grid == null) return floorTiles; for (int x = rect.xMin; x < rect.xMax; x++) { for (int y = rect.yMin; y < rect.yMax; y++) { if (x >= 0 && x < levelWidth && y >= 0 && y < levelHeight && grid[x, y] == TileType.Floor) { floorTiles.Add(new Vector2Int(x, y)); } } } return floorTiles; }
+    private Vector3 GetWorldPosition(Vector2Int tilePos) { if (groundTilemap == null) return new Vector3(tilePos.x + 0.5f, tilePos.y + 0.5f, 0); return groundTilemap.CellToWorld((Vector3Int)tilePos) + (groundTilemap.cellSize * 0.5f); }
+
+    // --- Tilemap Application ---
+    private void ApplyTilesToTilemap()
+    { // *** ADDED LOGGING ***
+        if (groundTilemap == null || wallTilemap == null || floorTile == null || wallTile == null || grid == null) { Debug.LogError("[ApplyTiles] Cannot apply tiles: Tilemaps, Tiles, or Grid not ready!"); return; }
+        Debug.Log($"[ApplyTiles] Clearing {groundTilemap.name} and {wallTilemap.name}...");
+        groundTilemap.ClearAllTiles(); wallTilemap.ClearAllTiles();
+        int floorCount = 0; int wallCount = 0;
+        for (int x = 0; x < levelWidth; x++) { for (int y = 0; y < levelHeight; y++) { Vector3Int position = new Vector3Int(x, y, 0); TileType currentTileType = grid[x, y]; switch (currentTileType) { case TileType.Floor: groundTilemap.SetTile(position, floorTile); wallTilemap.SetTile(position, null); floorCount++; break; case TileType.Wall: if (IsWallCandidate(x, y)) { wallTilemap.SetTile(position, wallTile); groundTilemap.SetTile(position, null); wallCount++; } else { wallTilemap.SetTile(position, null); groundTilemap.SetTile(position, null); } break; default: groundTilemap.SetTile(position, null); wallTilemap.SetTile(position, null); break; } } }
+        Debug.Log($"[ApplyTiles] Finished applying tiles. Placed {floorCount} floor tiles and {wallCount} wall tiles."); // Log actual counts
+    }
+    private bool IsWallCandidate(int x, int y)
+    { // *** ADDED LOGGING ***
+        if (grid == null || x < 0 || x >= levelWidth || y < 0 || y >= levelHeight || grid[x, y] != TileType.Wall) return false;
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                if (dx == 0 && dy == 0) continue; int nx = x + dx; int ny = y + dy; if (nx >= 0 && nx < levelWidth && ny >= 0 && ny < levelHeight && grid[nx, ny] == TileType.Floor)
+                {
+                    // Debug.Log($"[IsWallCandidate] Wall at ({x},{y}) is candidate due to floor at ({nx},{ny})");
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // --- Helper Functions ---
+    private Transform CreateOrFindParent(string parentName) { Transform existingParent = transform.Find(parentName); if (existingParent != null) { return existingParent; } else { GameObject parentObject = new GameObject(parentName); parentObject.transform.SetParent(this.transform); parentObject.transform.localPosition = Vector3.zero; return parentObject.transform; } }
+    private void DestroyChildren(string parentName) { Transform parent = transform.Find(parentName); if (parent != null) { int childCount = parent.childCount; for (int i = childCount - 1; i >= 0; i--) { GameObject child = parent.GetChild(i).gameObject; if (child != null) { if (Application.isPlaying) { Destroy(child); } else { DestroyImmediate(child); } } } } }
+    // Removed ParseLevelDesign()
+    private void RunBSPSplit() { if (bspLeaves == null) bspLeaves = new List<RectInt>(); else bspLeaves.Clear(); if (pseudoRandom == null) Initialize(); var rootNode = new RectInt(1, 1, levelWidth - 2, levelHeight - 2); var nodeQueue = new Queue<KeyValuePair<RectInt, int>>(); nodeQueue.Enqueue(new KeyValuePair<RectInt, int>(rootNode, 0)); while (nodeQueue.Count > 0) { var currentPair = nodeQueue.Dequeue(); RectInt currentNode = currentPair.Key; int currentIteration = currentPair.Value; if (currentIteration >= maxIterations || ShouldStopSplitting(currentNode)) { bspLeaves.Add(currentNode); continue; } if (TrySplitNode(currentNode, out RectInt nodeA, out RectInt nodeB)) { nodeQueue.Enqueue(new KeyValuePair<RectInt, int>(nodeA, currentIteration + 1)); nodeQueue.Enqueue(new KeyValuePair<RectInt, int>(nodeB, currentIteration + 1)); } else { bspLeaves.Add(currentNode); } } }
+    private bool ShouldStopSplitting(RectInt node) { if (node.width < minRoomSize * 2 && node.height < minRoomSize * 2) return true; float aspectRatio = node.width <= 0 || node.height <= 0 ? 1f : (float)Mathf.Max(node.width, node.height) / Mathf.Max(1, Mathf.Min(node.width, node.height)); if (aspectRatio > 4.0f) return true; return false; }
+    private bool TrySplitNode(RectInt node, out RectInt nodeA, out RectInt nodeB) { bool splitHorizontal; nodeA = nodeB = RectInt.zero; bool preferHorizontal = (node.height > node.width && (float)node.height / Mathf.Max(1, node.width) >= 1.2f); bool preferVertical = (node.width > node.height && (float)node.width / Mathf.Max(1, node.height) >= 1.2f); if (preferHorizontal) splitHorizontal = true; else if (preferVertical) splitHorizontal = false; else splitHorizontal = pseudoRandom.Next(0, 2) == 0; int minSizeForSplit = minRoomSize + (int)(roomPadding) + 1; minSizeForSplit = Mathf.Max(minRoomSize + 1, minSizeForSplit); if (splitHorizontal) { if (node.height < minSizeForSplit * 2) return false; int splitY = pseudoRandom.Next(node.y + minSizeForSplit, node.yMax - minSizeForSplit + 1); nodeA = new RectInt(node.x, node.y, node.width, splitY - node.y); nodeB = new RectInt(node.x, splitY, node.width, node.yMax - splitY); } else { if (node.width < minSizeForSplit * 2) return false; int splitX = pseudoRandom.Next(node.x + minSizeForSplit, node.xMax - minSizeForSplit + 1); nodeA = new RectInt(node.x, node.y, splitX - node.x, node.height); nodeB = new RectInt(splitX, node.y, node.xMax - splitX, node.height); } return true; }
+
+} // End of HybridLevelGenerator class
