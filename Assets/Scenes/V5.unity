@@ -1266,7 +1266,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d94a319dab8d3284d983c4def114753e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  generationMode: 1
+  generationMode: 0
   levelWidth: 100
   levelHeight: 100
   minRoomSize: 8
@@ -1286,7 +1286,7 @@ MonoBehaviour:
   wallTilemap: {fileID: 1521400880}
   floorTile: {fileID: 11400000, guid: 3f5b5b050a99feb4e98a954f647d17e6, type: 2}
   wallTile: {fileID: 11400000, guid: fd1a932b63d942046be33904a6e02fc0, type: 2}
-  seed: 349382562
+  seed: 349525203
   useRandomSeed: 1
   playerPrefab: {fileID: 3548798236488958899, guid: 233e123314ae4e948bcc465afc76dfb9, type: 3}
   enemyPrefab: {fileID: 7773039407867173279, guid: a722c0378e102014a9dfbe64ebc335bf, type: 3}

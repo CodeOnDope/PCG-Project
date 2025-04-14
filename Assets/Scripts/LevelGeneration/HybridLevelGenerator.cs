@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System; // Required for System.Random
 using System.Linq;
 using UnityEditor;
-using UnityEngine.UIElements;
 
 // Note: Assumes GenerationMode, NodeType, TileType enums are defined
 // in a separate accessible file like LevelGenerationData.cs
@@ -234,4 +233,4 @@ public class HybridLevelGenerator : MonoBehaviour
     private bool ShouldStopSplitting(RectInt node) { /* ... unchanged ... */ if (node.width < minRoomSize * 2 && node.height < minRoomSize * 2) return true; float aspectRatio = node.width <= 0 || node.height <= 0 ? 1f : (float)Mathf.Max(node.width, node.height) / Mathf.Max(1, Mathf.Min(node.width, node.height)); if (aspectRatio > 4.0f) return true; return false; }
     private bool TrySplitNode(RectInt node, out RectInt nodeA, out RectInt nodeB) { /* ... unchanged ... */ bool splitHorizontal; nodeA = nodeB = RectInt.zero; bool preferHorizontal = (node.height > node.width && (float)node.height / Mathf.Max(1, node.width) >= 1.2f); bool preferVertical = (node.width > node.height && (float)node.width / Mathf.Max(1, node.height) >= 1.2f); if (preferHorizontal) splitHorizontal = true; else if (preferVertical) splitHorizontal = false; else splitHorizontal = pseudoRandom.Next(0, 2) == 0; int minSizeForSplit = minRoomSize + (int)(roomPadding) + 1; minSizeForSplit = Mathf.Max(minRoomSize + 1, minSizeForSplit); if (splitHorizontal) { if (node.height < minSizeForSplit * 2) return false; int splitY = pseudoRandom.Next(node.y + minSizeForSplit, node.yMax - minSizeForSplit + 1); nodeA = new RectInt(node.x, node.y, node.width, splitY - node.y); nodeB = new RectInt(node.x, splitY, node.width, node.yMax - splitY); } else { if (node.width < minSizeForSplit * 2) return false; int splitX = pseudoRandom.Next(node.x + minSizeForSplit, node.xMax - minSizeForSplit + 1); nodeA = new RectInt(node.x, node.y, splitX - node.x, node.height); nodeB = new RectInt(splitX, node.y, node.xMax - splitX, node.height); } return true; }
 
-} // End of HybridLevelGenerator class
+}
