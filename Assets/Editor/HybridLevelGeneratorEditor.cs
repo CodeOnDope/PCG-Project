@@ -42,6 +42,7 @@ public class HybridLevelGeneratorEditor : Editor
     bool tileSettingsFoldout = true;
     bool randomnessSettingsFoldout = true;
     bool entitySettingsFoldout = true;
+    bool editorPreviewFoldout = true; // Foldout for preview settings
 
     // --- Style & Color ---
     Color dimensionsBgColor = new Color(0.85f, 0.9f, 1f);
@@ -110,7 +111,7 @@ public class HybridLevelGeneratorEditor : Editor
         { // Help text
             case GenerationMode.FullyProcedural: EditorGUILayout.HelpBox("BSP + Random Rect Rooms + MST Corridors.", MessageType.Info); break;
             case GenerationMode.HybridProcedural: EditorGUILayout.HelpBox("BSP + Random Templates/L-Shapes/Rects + MST Corridors.", MessageType.Info); break;
-            case GenerationMode.UserDefinedLayout: EditorGUILayout.HelpBox("Uses RoomNode components in the scene. Design layout using the Visual Level Designer window.", MessageType.Info); break; // Updated text
+            case GenerationMode.UserDefinedLayout: EditorGUILayout.HelpBox("Uses RoomNode components in the scene. Design layout using the Visual Level Designer window.", MessageType.Info); break;
         }
         EditorGUILayout.Space(5);
 
@@ -147,12 +148,6 @@ public class HybridLevelGeneratorEditor : Editor
             EditorGUILayout.Space(5);
         }
 
-        // Show Templates list if Hybrid or UserDefined (as UserDefined might use them via RoomNode)
-        if (currentMode == GenerationMode.HybridProcedural || currentMode == GenerationMode.UserDefinedLayout)
-        {
-            // Maybe put this in Common Settings instead? Let's move it there.
-        }
-
         // Common Settings
         commonSettingsFoldout = EditorGUILayout.Foldout(commonSettingsFoldout, "Common Settings", true, foldoutHeaderStyle);
         if (commonSettingsFoldout)
@@ -170,11 +165,27 @@ public class HybridLevelGeneratorEditor : Editor
             {
                 EditorGUILayout.PropertyField(roomTemplatePrefabsProp, new GUIContent("Room Template Prefabs"), true);
             }
+            // Moved Editor Preview to its own foldout
+            // EditorGUILayout.PropertyField(levelPreviewTextureProp);
+            // EditorGUILayout.PropertyField(levelPreviewCameraProp);
+            EditorGUILayout.EndVertical();
+        }
+        EditorGUILayout.Space(5);
+
+        // Editor Preview Section (Always shown, but only relevant if setup)
+        editorPreviewFoldout = EditorGUILayout.Foldout(editorPreviewFoldout, "Editor Preview Settings", true, foldoutHeaderStyle);
+        if (editorPreviewFoldout)
+        {
+            GUI.backgroundColor = commonBgColor * 0.95f; // Slightly different grey
+            EditorGUILayout.BeginVertical(GUI.skin.box);
+            GUI.backgroundColor = defaultBgColor;
+            EditorGUILayout.HelpBox("Assign a Render Texture and a Camera that renders to it to see a preview in the Visual Level Designer window.", MessageType.Info);
             EditorGUILayout.PropertyField(levelPreviewTextureProp);
-            EditorGUILayout.PropertyField(levelPreviewCameraProp); // Added Camera field
+            EditorGUILayout.PropertyField(levelPreviewCameraProp);
             EditorGUILayout.EndVertical();
         }
         EditorGUILayout.Space(15);
+
 
         // --- Draw Buttons ---
         EditorGUILayout.LabelField("Actions", EditorStyles.boldLabel);
@@ -183,11 +194,11 @@ public class HybridLevelGeneratorEditor : Editor
         if (GUILayout.Button("Generate Level", buttonStyle)) { HybridLevelGenerator generator = (HybridLevelGenerator)target; Undo.RecordObject(generator, "Generate Level"); generator.GenerateLevel(); MarkSceneDirty(generator); }
         GUI.backgroundColor = defaultBgColor; EditorGUILayout.Space(5);
         GUI.backgroundColor = new Color(1.0f, 0.6f, 0.6f);
-        if (GUILayout.Button("Clear Level", buttonStyle)) { HybridLevelGenerator generator = (HybridLevelGenerator)target; if (EditorUtility.DisplayDialog("Confirm Clear", "Clear generated level?", "Clear", "Cancel")) { Undo.RecordObject(generator, "Clear Level"); generator.ClearLevel(); MarkSceneDirty(generator); } }
+        if (GUILayout.Button("Clear Level", buttonStyle)) { HybridLevelGenerator generator = (HybridLevelGenerator)target; if (EditorUtility.DisplayDialog("Confirm Clear", "Clear generated level AND scene design nodes?", "Clear All", "Cancel")) { Undo.RecordObject(generator, "Clear Level"); generator.ClearLevel(); MarkSceneDirty(generator); } }
         GUI.backgroundColor = defaultBgColor;
 
         serializedObject.ApplyModifiedProperties();
     }
 
-    private void MarkSceneDirty(HybridLevelGenerator generator) { /* ... unchanged ... */ if (!Application.isPlaying && generator != null && generator.gameObject != null) { try { if (generator.gameObject.scene.IsValid()) { UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene); } } catch (Exception e) { Debug.LogWarning($"Could not mark scene dirty: {e.Message}"); } } }
+    private void MarkSceneDirty(HybridLevelGenerator generator) { if (!Application.isPlaying && generator != null && generator.gameObject != null) { try { if (generator.gameObject.scene.IsValid()) { UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene); } } catch (Exception e) { Debug.LogWarning($"Could not mark scene dirty: {e.Message}"); } } }
 }

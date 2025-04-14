@@ -5,48 +5,48 @@
             "displayName": "New Room",
             "nodeType": 0,
             "x": -20.0,
-            "y": -30.0,
+            "y": -10.0,
             "logicalWidth": 10,
             "logicalHeight": 10,
             "templateName": "",
-            "visualWidth": 80.0,
-            "visualHeight": 40.0
+            "visualWidth": 20.0,
+            "visualHeight": 20.0
         },
         {
             "id": "NewRoom_2",
             "displayName": "New Room",
             "nodeType": 0,
-            "x": 30.0,
-            "y": -30.0,
+            "x": 0.0,
+            "y": -10.0,
             "logicalWidth": 10,
             "logicalHeight": 10,
             "templateName": "",
-            "visualWidth": 80.0,
-            "visualHeight": 40.0
+            "visualWidth": 20.0,
+            "visualHeight": 20.0
         },
         {
             "id": "NewRoom_3",
             "displayName": "New Room",
             "nodeType": 0,
-            "x": 30.0,
+            "x": 10.0,
             "y": 10.0,
             "logicalWidth": 10,
             "logicalHeight": 10,
             "templateName": "",
-            "visualWidth": 80.0,
-            "visualHeight": 40.0
+            "visualWidth": 20.0,
+            "visualHeight": 20.0
         },
         {
             "id": "NewRoom_4",
             "displayName": "New Room",
             "nodeType": 0,
-            "x": -10.0,
-            "y": 0.0,
+            "x": -20.0,
+            "y": 10.0,
             "logicalWidth": 10,
             "logicalHeight": 10,
             "templateName": "",
-            "visualWidth": 80.0,
-            "visualHeight": 40.0
+            "visualWidth": 20.0,
+            "visualHeight": 20.0
         }
     ],
     "connections": [

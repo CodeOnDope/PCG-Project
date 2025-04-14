@@ -36,7 +36,7 @@ public class VisualLevelDesignEditor : EditorWindow
     #endregion
 
     #region Editor State Variables
-    // ... (Other variables unchanged) ...
+    // ... (Most variables unchanged) ...
     private List<DesignerNode> nodes = new List<DesignerNode>();
     private List<Connection> connections = new List<Connection>();
     private HybridLevelGenerator targetGenerator;
@@ -89,7 +89,7 @@ public class VisualLevelDesignEditor : EditorWindow
     #region Drawing Methods
     private void DrawToolbar() { /* ... Re-added Save/Load ... */ EditorGUILayout.BeginHorizontal(EditorStyles.toolbar); if (GUILayout.Button("New", EditorStyles.toolbarButton, GUILayout.Width(50))) { NewDesign(); } if (GUILayout.Button("Open", EditorStyles.toolbarButton, GUILayout.Width(50))) { OpenDesign(); } if (GUILayout.Button("Save", EditorStyles.toolbarButton, GUILayout.Width(50))) { SaveDesign(); } if (GUILayout.Button("Save As", EditorStyles.toolbarButton, GUILayout.Width(60))) { SaveDesignAs(); } GUILayout.Space(20); showInstructions = GUILayout.Toggle(showInstructions, "Show Help", EditorStyles.toolbarButton); snapToGrid = GUILayout.Toggle(snapToGrid, "Snap Nodes", EditorStyles.toolbarButton); GUILayout.Space(10); if (GUILayout.Button("Auto-Arrange", EditorStyles.toolbarButton, GUILayout.Width(80))) { AutoArrangeNodes(); } if (GUILayout.Button("Center View (F)", EditorStyles.toolbarButton, GUILayout.Width(100))) { CenterView(); } if (GUILayout.Button("Focus Origin (O)", EditorStyles.toolbarButton, GUILayout.Width(100))) { FocusOnOrigin(); } GUILayout.FlexibleSpace(); targetGenerator = EditorGUILayout.ObjectField("Target Generator:", targetGenerator, typeof(HybridLevelGenerator), true, GUILayout.Width(250)) as HybridLevelGenerator; EditorGUILayout.EndHorizontal(); }
     private void DrawGraphArea(Rect availableRect) { /* ... unchanged ... */ GUI.Box(availableRect, "", EditorStyles.helpBox); GUI.BeginClip(availableRect); Vector2 graphSize = availableRect.size; DrawGrid(graphSize, gridSnapSize, 0.2f, Color.gray); DrawGrid(graphSize, gridSnapSize * 5f, 0.4f, Color.gray); DrawOriginMarker(graphSize); DrawCoordinateLabels(graphSize); DrawGeneratorBoundsRect(graphSize); DrawConnections(graphSize); DrawNodes(graphSize); if (isCreatingConnection && connectingFromNode != null) { DrawConnectionInProgress(graphSize); } GUI.EndClip(); if (showInstructions && instructionStyle != null && helpContent != null) { float helpWidth = Mathf.Min(350, availableRect.width - 20); float helpHeight = stylesInitialized ? instructionStyle.CalcHeight(helpContent, helpWidth) : 110f; Rect helpRect = new Rect(availableRect.x + 10, availableRect.y + 10, helpWidth, helpHeight); GUI.Box(helpRect, helpContent, instructionStyle); } }
-    private void DrawSidePanels() { /* ... unchanged ... */ EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.Width(Mathf.Max(250, position.width * 0.25f)), GUILayout.ExpandHeight(true)); sidePanelScrollPos = EditorGUILayout.BeginScrollView(sidePanelScrollPos); DrawGlobalSettingsPanel(); EditorGUILayout.Space(10); DrawRoomCreationPanel(); EditorGUILayout.Space(10); DrawNodePropertiesPanel(); EditorGUILayout.EndScrollView(); EditorGUILayout.Space(10); Color defaultBg = GUI.backgroundColor; GUI.backgroundColor = Color.green * 1.2f; if (GUILayout.Button("Create Scene Objects & Generate", GUILayout.Height(35))) { CreateSceneObjectsAndGenerate(); } GUI.backgroundColor = defaultBg; EditorGUILayout.Space(5); EditorGUILayout.EndVertical(); }
+    private void DrawSidePanels() { /* ... Moved Generate Button ... */ EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.Width(Mathf.Max(250, position.width * 0.25f)), GUILayout.ExpandHeight(true)); sidePanelScrollPos = EditorGUILayout.BeginScrollView(sidePanelScrollPos); DrawGlobalSettingsPanel(); EditorGUILayout.Space(10); DrawRoomCreationPanel(); EditorGUILayout.Space(10); DrawNodePropertiesPanel(); EditorGUILayout.EndScrollView(); EditorGUILayout.Space(10); Color defaultBg = GUI.backgroundColor; GUI.backgroundColor = Color.green * 1.2f; if (GUILayout.Button("Create Scene Objects & Generate", GUILayout.Height(35))) { CreateSceneObjectsAndGenerate(); } GUI.backgroundColor = defaultBg; EditorGUILayout.Space(5); EditorGUILayout.EndVertical(); }
     private void DrawGrid(Vector2 viewSize, float gridSpacing, float gridOpacity, Color gridColor) { /* ... unchanged ... */ Handles.BeginGUI(); Handles.color = new Color(gridColor.r, gridColor.g, gridColor.b, gridOpacity); float zoomedSpacing = gridSpacing * zoom; if (zoomedSpacing < 4f) { Handles.EndGUI(); return; } Vector2 offset = new Vector2(panOffset.x % zoomedSpacing, panOffset.y % zoomedSpacing); int widthDivs = Mathf.CeilToInt(viewSize.x / zoomedSpacing); int heightDivs = Mathf.CeilToInt(viewSize.y / zoomedSpacing); Vector2 originScreenPos = WorldToScreenPosition(Vector2.zero); for (int i = -1; i <= widthDivs; i++) { float x = zoomedSpacing * i + offset.x; bool isOriginLine = Mathf.Abs(x - (originScreenPos.x - graphViewRect.x)) < 1f; Handles.color = isOriginLine ? new Color(0.1f, 0.1f, 0.1f, 0.5f) : new Color(gridColor.r, gridColor.g, gridColor.b, gridOpacity); Handles.DrawLine(new Vector3(x, 0, 0), new Vector3(x, viewSize.y, 0)); } for (int j = -1; j <= heightDivs; j++) { float y = zoomedSpacing * j + offset.y; bool isOriginLine = Mathf.Abs(y - (originScreenPos.y - graphViewRect.y)) < 1f; Handles.color = isOriginLine ? new Color(0.1f, 0.1f, 0.1f, 0.5f) : new Color(gridColor.r, gridColor.g, gridColor.b, gridOpacity); Handles.DrawLine(new Vector3(0, y, 0), new Vector3(viewSize.x, y, 0)); } Handles.color = Color.white; Handles.EndGUI(); }
     private void DrawOriginMarker(Vector2 graphSize) { /* ... unchanged ... */ Vector2 originScreenPos = WorldToScreenPosition(Vector2.zero); float markerSize = 5f * zoom; if (originScreenPos.x >= graphViewRect.x && originScreenPos.x <= graphViewRect.x + graphSize.x && originScreenPos.y >= graphViewRect.y && originScreenPos.y <= graphViewRect.y + graphSize.y) { Handles.BeginGUI(); Handles.color = Color.red; Vector2 screenOriginRelative = originScreenPos - graphViewRect.position; Handles.DrawLine(screenOriginRelative + Vector2.left * markerSize, screenOriginRelative + Vector2.right * markerSize); Handles.DrawLine(screenOriginRelative + Vector2.up * markerSize, screenOriginRelative + Vector2.down * markerSize); Handles.color = Color.white; Handles.EndGUI(); } }
     private void DrawCoordinateLabels(Vector2 viewSize) { /* ... unchanged ... */ if (!stylesInitialized || coordinateLabelStyle == null) return; Handles.BeginGUI(); float majorGridSpacing = gridSnapSize * 5f; float labelSpacing = majorGridSpacing * zoom; if (labelSpacing < 40f) labelSpacing *= 2f; if (labelSpacing < 20f) { Handles.EndGUI(); return; } Vector2 offset = panOffset; Vector2 topLeftWorld = ScreenToWorldPosition(Vector2.zero); Vector2 bottomRightWorld = ScreenToWorldPosition(viewSize); float labelStep = majorGridSpacing; if (labelSpacing < 40f) labelStep *= 2f; float firstWorldX = Mathf.Ceil(topLeftWorld.x / labelStep) * labelStep; float firstWorldY = Mathf.Ceil(topLeftWorld.y / labelStep) * labelStep; for (float worldX = firstWorldX; worldX < bottomRightWorld.x; worldX += labelStep) { Vector2 screenPos = WorldToScreenPosition(new Vector2(worldX, topLeftWorld.y)); if (screenPos.x < graphViewRect.x || screenPos.x > graphViewRect.x + viewSize.x) continue; Rect labelRect = new Rect(screenPos.x + 2, graphViewRect.y + 2, 50, 15); GUI.Label(labelRect, worldX.ToString("F0"), coordinateLabelStyle); } for (float worldY = firstWorldY; worldY < bottomRightWorld.y; worldY += labelStep) { Vector2 screenPos = WorldToScreenPosition(new Vector2(topLeftWorld.x, worldY)); if (screenPos.y < graphViewRect.y || screenPos.y > graphViewRect.y + viewSize.y) continue; Rect labelRect = new Rect(graphViewRect.x + 2, screenPos.y + 2, 50, 15); GUI.Label(labelRect, worldY.ToString("F0"), coordinateLabelStyle); } Handles.EndGUI(); }
@@ -104,10 +104,10 @@ public class VisualLevelDesignEditor : EditorWindow
     #endregion
 
     #region Event Handling
-    private void HandleKeyboardShortcuts() { /* ... Added Save/Load ... */ Event e = Event.current; if (e.type == EventType.KeyDown) { if (e.keyCode == KeyCode.Delete || e.keyCode == KeyCode.Backspace) { if (selectedNode != null) { DeleteNode(selectedNode); e.Use(); } else if (selectedConnection != null) { RemoveConnection(selectedConnection.fromNode, selectedConnection.toNode); e.Use(); } } else if (e.control && e.keyCode == KeyCode.S) { SaveDesign(); e.Use(); } else if (e.control && e.shift && e.keyCode == KeyCode.S) { SaveDesignAs(); e.Use(); } else if (e.control && e.keyCode == KeyCode.O) { OpenDesign(); e.Use(); } else if (e.control && e.keyCode == KeyCode.N) { NewDesign(); e.Use(); } else if (e.keyCode == KeyCode.F) { CenterView(); e.Use(); } else if (e.keyCode == KeyCode.O) { FocusOnOrigin(); e.Use(); } else if (e.keyCode == KeyCode.Escape) { if (isCreatingConnection) { isCreatingConnection = false; connectingFromNode = null; e.Use(); } else if (selectedNode != null || selectedConnection != null) { selectedNode = null; selectedConnection = null; e.Use(); } } } }
+    private void HandleKeyboardShortcuts() { /* ... Re-added Save/Load ... */ Event e = Event.current; if (e.type == EventType.KeyDown) { if (e.keyCode == KeyCode.Delete || e.keyCode == KeyCode.Backspace) { if (selectedNode != null) { DeleteNode(selectedNode); e.Use(); } else if (selectedConnection != null) { RemoveConnection(selectedConnection.fromNode, selectedConnection.toNode); e.Use(); } } else if (e.control && e.keyCode == KeyCode.S) { SaveDesign(); e.Use(); } else if (e.control && e.shift && e.keyCode == KeyCode.S) { SaveDesignAs(); e.Use(); } else if (e.control && e.keyCode == KeyCode.O) { OpenDesign(); e.Use(); } else if (e.control && e.keyCode == KeyCode.N) { NewDesign(); e.Use(); } else if (e.keyCode == KeyCode.F) { CenterView(); e.Use(); } else if (e.keyCode == KeyCode.O) { FocusOnOrigin(); e.Use(); } else if (e.keyCode == KeyCode.Escape) { if (isCreatingConnection) { isCreatingConnection = false; connectingFromNode = null; e.Use(); } else if (selectedNode != null || selectedConnection != null) { selectedNode = null; selectedConnection = null; e.Use(); } } } }
     private void ProcessEvents(Event e) { /* ... unchanged ... */ switch (e.type) { case EventType.MouseDown: OnMouseDown(e); break; case EventType.MouseUp: OnMouseUp(e); break; case EventType.MouseDrag: OnMouseDrag(e); break; case EventType.ScrollWheel: OnScrollWheel(e); break; case EventType.ContextClick: HandleRightMouseDown(e.mousePosition, e); break; } }
     private void OnMouseDown(Event e) { /* ... unchanged ... */ Vector2 graphSpaceMousePos = ScreenToWorldPosition(e.mousePosition); if (e.button == 0) { HandleLeftMouseDown(graphSpaceMousePos, e); } else if (e.button == 2) { isPanning = true; isDraggingNode = false; isCreatingConnection = false; GUI.FocusControl(null); e.Use(); } }
-    private void OnMouseUp(Event e) { /* ... Added Snapping & hasUnsavedChanges ... */ if (e.button == 0) { if (isCreatingConnection && connectingFromNode != null) { CompleteConnection(e.mousePosition); } if (isDraggingNode && selectedNode != null) { if (snapToGrid && gridSnapSize > 0) { Vector2 currentPos = selectedNode.position; float snappedX = Mathf.Round(currentPos.x / gridSnapSize) * gridSnapSize; float snappedY = Mathf.Round(currentPos.y / gridSnapSize) * gridSnapSize; if (snappedX != currentPos.x || snappedY != currentPos.y) { selectedNode.SetPosition(new Vector2(snappedX, snappedY)); hasUnsavedChanges = true; } } isDraggingNode = false; } } else if (e.button == 2) { isPanning = false; } foreach (var node in nodes) node.isDragging = false; }
+    private void OnMouseUp(Event e) { /* ... Added Snapping & hasUnsavedChanges ... */ if (e.button == 0) { if (isCreatingConnection && connectingFromNode != null) { CompleteConnection(e.mousePosition); } if (isDraggingNode && selectedNode != null) { if (snapToGrid && gridSnapSize > 0) { Vector2 currentPos = selectedNode.position; float snappedX = Mathf.Round(currentPos.x / gridSnapSize) * gridSnapSize; float snappedY = Mathf.Round(currentPos.y / gridSnapSize) * gridSnapSize; if (snappedX != currentPos.x || snappedY != currentPos.y) { selectedNode.SetPosition(new Vector2(snappedX, snappedY)); hasUnsavedChanges = true; GUI.changed = true; } } isDraggingNode = false; } } else if (e.button == 2) { isPanning = false; } foreach (var node in nodes) node.isDragging = false; }
     private void OnMouseDrag(Event e) { /* ... Added hasUnsavedChanges ... */ if (e.button == 0 && isDraggingNode && selectedNode != null) { Vector2 worldDelta = e.delta / zoom; selectedNode.SetPosition(selectedNode.position + worldDelta); hasUnsavedChanges = true; GUI.changed = true; e.Use(); } else if (e.button == 2 && isPanning) { panOffset += e.delta; GUI.changed = true; e.Use(); } }
     private void OnScrollWheel(Event e) { /* ... unchanged ... */ float zoomDelta = -e.delta.y / 150.0f; float newZoom = zoom + zoomDelta; newZoom = Mathf.Clamp(newZoom, 0.2f, 3.0f); Vector2 mousePos = e.mousePosition; Vector2 worldPos = ScreenToWorldPosition(mousePos); zoom = newZoom; Vector2 newScreenPos = WorldToScreenPosition(worldPos); panOffset += (mousePos - newScreenPos); e.Use(); GUI.changed = true; }
     private void HandleLeftMouseDown(Vector2 worldMousePos, Event e) { /* ... unchanged ... */ bool clickedOnNode = false; selectedConnection = null; for (int i = nodes.Count - 1; i >= 0; i--) { var node = nodes[i]; if (node.rect.Contains(worldMousePos)) { selectedNode = node; isDraggingNode = true; dragStartOffset = worldMousePos - node.position; clickedOnNode = true; GUI.FocusControl(null); e.Use(); break; } } if (!clickedOnNode) { selectedNode = null; GUI.FocusControl(null); } GUI.changed = true; }
@@ -174,13 +174,14 @@ public class VisualLevelDesignEditor : EditorWindow
         {
             if (path.StartsWith(Application.dataPath)) { path = "Assets" + path.Substring(Application.dataPath.Length); }
             currentFilePath = path;
+            this.titleContent = new GUIContent("Visual Level Designer*"); // Indicate unsaved changes
             return SaveToFile(currentFilePath);
         }
         return false;
     }
 
     private bool SaveToFile(string path)
-    {
+    { // *** Saves Visual Size ***
         try
         {
             DesignerData data = new DesignerData();
@@ -218,7 +219,7 @@ public class VisualLevelDesignEditor : EditorWindow
     }
 
     private void OpenDesign()
-    {
+    { // *** Loads Visual Size ***
         if (!AskSaveChanges()) return;
         string path = EditorUtility.OpenFilePanel("Open Level Design", Application.dataPath, "json");
         if (!string.IsNullOrEmpty(path) && File.Exists(path))
@@ -240,7 +241,7 @@ public class VisualLevelDesignEditor : EditorWindow
                     // *** Use loaded visual size if available, otherwise global default ***
                     Vector2 loadedVisualSize = (nodeInfo.visualWidth > 0 && nodeInfo.visualHeight > 0)
                                              ? new Vector2(nodeInfo.visualWidth, nodeInfo.visualHeight)
-                                             : globalNodeVisualSize; // Fallback
+                                             : globalNodeVisualSize; // Fallback to current global setting
 
                     DesignerNode newNode = new DesignerNode(nodeInfo.id, (NodeType)nodeInfo.nodeType, new Vector2(nodeInfo.x, nodeInfo.y), new Vector2Int(nodeInfo.logicalWidth, nodeInfo.logicalHeight), loadedVisualSize, nodeInfo.displayName);
                     newNode.templateName = nodeInfo.templateName;
@@ -267,7 +268,7 @@ public class VisualLevelDesignEditor : EditorWindow
     }
 
     private void CreateSceneObjectsAndGenerate()
-    {
+    { // *** Added Confirmation Dialog ***
         if (targetGenerator == null) { EditorUtility.DisplayDialog("Error", "Please assign a Target Generator in the toolbar first.", "OK"); return; }
         if (nodes.Count == 0) { EditorUtility.DisplayDialog("Error", "Cannot generate level. Design is empty.", "OK"); return; }
 
@@ -277,10 +278,10 @@ public class VisualLevelDesignEditor : EditorWindow
         if (designRoot == null) { designRoot = new GameObject("LevelDesignRoot"); Undo.RegisterCreatedObjectUndo(designRoot, "Create Level Design Root"); }
         else { int childCount = designRoot.transform.childCount; for (int i = childCount - 1; i >= 0; i--) { Undo.DestroyObjectImmediate(designRoot.transform.GetChild(i).gameObject); } }
 
-        // Assign layer for hiding (User needs to create layer and set camera culling)
         int designLayer = LayerMask.NameToLayer("LevelDesignNodes");
-        if (designLayer == -1) { Debug.LogWarning("Layer 'LevelDesignNodes' not found. Please create it in Project Settings -> Tags and Layers. Scene nodes will be visible."); designLayer = 0; } // Default layer if not found
+        if (designLayer == -1) { Debug.LogWarning("Layer 'LevelDesignNodes' not found. Please create it in Project Settings -> Tags and Layers. Scene nodes will be visible."); designLayer = 0; }
         designRoot.layer = designLayer;
+        designRoot.hideFlags = HideFlags.HideInHierarchy; // Hide root from hierarchy
 
         Dictionary<string, RoomNode> createdNodeComponents = new Dictionary<string, RoomNode>();
         foreach (var node in nodes)
@@ -288,6 +289,7 @@ public class VisualLevelDesignEditor : EditorWindow
             GameObject nodeGO = new GameObject(node.displayName); Undo.RegisterCreatedObjectUndo(nodeGO, "Create Room Node Object"); nodeGO.transform.SetParent(designRoot.transform);
             nodeGO.transform.position = new Vector3(node.position.x, node.position.y, 0);
             nodeGO.layer = designLayer; // Assign layer
+                                        // nodeGO.hideFlags = HideFlags.HideInHierarchy; // Optionally hide individual nodes too
             RoomNode rnComponent = Undo.AddComponent<RoomNode>(nodeGO); rnComponent.roomId = node.id; rnComponent.roomType = node.nodeType; rnComponent.roomTemplatePrefab = node.templatePrefab; rnComponent.roomSize = node.size; rnComponent.connectedRooms = new List<RoomNode>(); createdNodeComponents[node.id] = rnComponent;
         }
         foreach (var connection in connections)
@@ -305,15 +307,14 @@ public class VisualLevelDesignEditor : EditorWindow
         Debug.Log($"Created {nodes.Count} RoomNode GameObjects under '{designRoot.name}'. Assigned to layer {LayerMask.LayerToName(designLayer)}.");
 
         Undo.RecordObject(targetGenerator, "Set Generation Mode and Generate");
-        targetGenerator.generationMode = GenerationMode.UserDefinedLayout; // Use the correct enum name
+        targetGenerator.generationMode = GenerationMode.UserDefinedLayout;
         EditorUtility.SetDirty(targetGenerator);
         Debug.Log($"Set {targetGenerator.name} mode to UserDefinedLayout and generating...");
-        targetGenerator.GenerateLevel();
+        targetGenerator.GenerateLevel(true); // Pass true to skip ClearLevel
 
         if (designRoot != null) EditorGUIUtility.PingObject(designRoot);
 
-        // *** ADDED: Confirmation Dialog ***
-        EditorUtility.DisplayDialog("Generation Triggered", "Scene objects created and level generation started. Check the scene view and console for results.", "OK");
+        EditorUtility.DisplayDialog("Generation Triggered", "Scene objects created/updated and level generation started. Check the scene view and console for results.", "OK");
     }
 
     // Removed ExportAsJson
