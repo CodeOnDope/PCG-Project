@@ -2,8 +2,8 @@
 using UnityEditor;
 using System.Collections.Generic;
 using System.Linq;
-using System.IO; // Required for File operations
-using System; // Required for Tuple, Exception
+using System.IO;
+using System;
 
 // Note: Assumes NodeType enum is defined in a separate file (e.g., LevelGenerationData.cs)
 
@@ -11,42 +11,9 @@ public class VisualLevelDesignEditor : EditorWindow
 {
     #region Data Structures
     private class DesignerNode
-    {
-        public string id;
-        public string displayName;
-        public NodeType nodeType;
-        public Vector2 position; // Center position in world space
-        public Vector2Int size; // Logical size used by generator
-        public string templateName;
-        public GameObject templatePrefab;
-        public List<string> connections = new List<string>();
-        public Rect rect; // World-space rect for hit detection & drawing
-        public bool isSelected;
-        public bool isDragging;
-        public Color typeColor; // Default color based on type
-        public Vector2 visualSize; // Current visual size (controlled globally)
-
-        public DesignerNode(string id, NodeType type, Vector2 position, Vector2Int logicalSize, Vector2 initialVisualSize, string name = null)
-        {
-            this.id = id;
-            this.nodeType = type;
-            this.position = position;
-            this.size = logicalSize;
-            this.isSelected = false;
-            this.isDragging = false;
-            this.displayName = string.IsNullOrEmpty(name) ? $"{type}_{id}" : name;
-            this.visualSize = initialVisualSize; // Set initial visual size from global
-
-            // Use solid colors
-            switch (type)
-            {
-                case NodeType.Rect: this.typeColor = UnityEngine.ColorUtility.TryParseHtmlString("#3B82F6", out Color cRect) ? cRect : Color.blue; break;
-                case NodeType.LShape: this.typeColor = UnityEngine.ColorUtility.TryParseHtmlString("#10B981", out Color cL) ? cL : Color.green; break;
-                case NodeType.Template: this.typeColor = UnityEngine.ColorUtility.TryParseHtmlString("#8B5CF6", out Color cT) ? cT : Color.magenta; break;
-                default: this.typeColor = Color.grey; break;
-            }
-            UpdateRect();
-        }
+    { /* ... Definition unchanged ... */
+        public string id; public string displayName; public NodeType nodeType; public Vector2 position; public Vector2Int size; public string templateName; public GameObject templatePrefab; public List<string> connections = new List<string>(); public Rect rect; public bool isSelected; public bool isDragging; public Color typeColor; public Vector2 visualSize;
+        public DesignerNode(string id, NodeType type, Vector2 position, Vector2Int logicalSize, Vector2 initialVisualSize, string name = null) { this.id = id; this.nodeType = type; this.position = position; this.size = logicalSize; this.isSelected = false; this.isDragging = false; this.displayName = string.IsNullOrEmpty(name) ? $"{type}_{id}" : name; this.visualSize = initialVisualSize; switch (type) { case NodeType.Rect: this.typeColor = UnityEngine.ColorUtility.TryParseHtmlString("#3B82F6", out Color cRect) ? cRect : Color.blue; break; case NodeType.LShape: this.typeColor = UnityEngine.ColorUtility.TryParseHtmlString("#10B981", out Color cL) ? cL : Color.green; break; case NodeType.Template: this.typeColor = UnityEngine.ColorUtility.TryParseHtmlString("#8B5CF6", out Color cT) ? cT : Color.magenta; break; default: this.typeColor = Color.grey; break; } UpdateRect(); }
         public void UpdateRect() { this.rect = new Rect(position.x - visualSize.x / 2f, position.y - visualSize.y / 2f, visualSize.x, visualSize.y); }
         public void SetPosition(Vector2 newPosition) { this.position = newPosition; UpdateRect(); }
         public void SetVisualSize(Vector2 newSize) { this.visualSize.x = Mathf.Max(20f, newSize.x); this.visualSize.y = Mathf.Max(20f, newSize.y); UpdateRect(); }
@@ -58,30 +25,18 @@ public class VisualLevelDesignEditor : EditorWindow
         public override bool Equals(object obj) { if (obj is Connection other) { return (fromNode == other.fromNode && toNode == other.toNode) || (fromNode == other.toNode && toNode == other.fromNode); } return false; }
         public override int GetHashCode() { int hash1 = fromNode?.GetHashCode() ?? 0; int hash2 = toNode?.GetHashCode() ?? 0; return hash1 ^ hash2; }
     }
-
-    // *** RE-ADDED: For Save/Load ***
+    // JSON Data structures re-added for Save/Load
     [System.Serializable]
     public class DesignerData
-    {
-        public List<NodeInfo> nodes = new List<NodeInfo>();
-        public List<ConnectionInfo> connections = new List<ConnectionInfo>();
-
-        [System.Serializable]
-        public class NodeInfo
-        {
-            public string id; public string displayName; public int nodeType; public float x, y; public int width, height; public string templateName;
-            // Could add visual size/color here if needed for save/load persistence
-        }
-        [System.Serializable]
-        public class ConnectionInfo
-        {
-            public string fromId; public string toId;
-        }
+    { /* ... Definition unchanged ... */
+        public List<NodeInfo> nodes = new List<NodeInfo>(); public List<ConnectionInfo> connections = new List<ConnectionInfo>();
+        [System.Serializable] public class NodeInfo { public string id; public string displayName; public int nodeType; public float x, y; public int logicalWidth, logicalHeight; public string templateName; public float visualWidth; public float visualHeight; }
+        [System.Serializable] public class ConnectionInfo { public string fromId; public string toId; }
     }
     #endregion
 
     #region Editor State Variables
-    // ... (Most variables unchanged) ...
+    // ... (Other variables unchanged) ...
     private List<DesignerNode> nodes = new List<DesignerNode>();
     private List<Connection> connections = new List<Connection>();
     private HybridLevelGenerator targetGenerator;
@@ -119,8 +74,6 @@ public class VisualLevelDesignEditor : EditorWindow
     private Vector2 globalNodeVisualSize = new Vector2(80f, 40f);
     private Color globalNodeColor = Color.gray;
     private bool useNodeTypeColor = true;
-
-    // *** RE-ADDED: For Save/Load ***
     private bool hasUnsavedChanges = false;
     private string currentFilePath = "";
     #endregion
@@ -134,54 +87,9 @@ public class VisualLevelDesignEditor : EditorWindow
     #endregion
 
     #region Drawing Methods
-    private void DrawToolbar()
-    { // *** RE-ADDED Save/Load Buttons ***
-        EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-        if (GUILayout.Button("New", EditorStyles.toolbarButton, GUILayout.Width(50))) { NewDesign(); } // Now prompts if unsaved
-        if (GUILayout.Button("Open", EditorStyles.toolbarButton, GUILayout.Width(50))) { OpenDesign(); }
-        if (GUILayout.Button("Save", EditorStyles.toolbarButton, GUILayout.Width(50))) { SaveDesign(); }
-        if (GUILayout.Button("Save As", EditorStyles.toolbarButton, GUILayout.Width(60))) { SaveDesignAs(); }
-        GUILayout.Space(20);
-        showInstructions = GUILayout.Toggle(showInstructions, "Show Help", EditorStyles.toolbarButton);
-        snapToGrid = GUILayout.Toggle(snapToGrid, "Snap Nodes", EditorStyles.toolbarButton);
-        GUILayout.Space(10);
-        if (GUILayout.Button("Auto-Arrange", EditorStyles.toolbarButton, GUILayout.Width(80))) { AutoArrangeNodes(); }
-        if (GUILayout.Button("Center View (F)", EditorStyles.toolbarButton, GUILayout.Width(100))) { CenterView(); }
-        if (GUILayout.Button("Focus Origin (O)", EditorStyles.toolbarButton, GUILayout.Width(100))) { FocusOnOrigin(); }
-        GUILayout.FlexibleSpace();
-        targetGenerator = EditorGUILayout.ObjectField("Target Generator:", targetGenerator, typeof(HybridLevelGenerator), true, GUILayout.Width(250)) as HybridLevelGenerator;
-        // Removed Generate button from toolbar (it's on side panel)
-        EditorGUILayout.EndHorizontal();
-    }
-
+    private void DrawToolbar() { /* ... Re-added Save/Load ... */ EditorGUILayout.BeginHorizontal(EditorStyles.toolbar); if (GUILayout.Button("New", EditorStyles.toolbarButton, GUILayout.Width(50))) { NewDesign(); } if (GUILayout.Button("Open", EditorStyles.toolbarButton, GUILayout.Width(50))) { OpenDesign(); } if (GUILayout.Button("Save", EditorStyles.toolbarButton, GUILayout.Width(50))) { SaveDesign(); } if (GUILayout.Button("Save As", EditorStyles.toolbarButton, GUILayout.Width(60))) { SaveDesignAs(); } GUILayout.Space(20); showInstructions = GUILayout.Toggle(showInstructions, "Show Help", EditorStyles.toolbarButton); snapToGrid = GUILayout.Toggle(snapToGrid, "Snap Nodes", EditorStyles.toolbarButton); GUILayout.Space(10); if (GUILayout.Button("Auto-Arrange", EditorStyles.toolbarButton, GUILayout.Width(80))) { AutoArrangeNodes(); } if (GUILayout.Button("Center View (F)", EditorStyles.toolbarButton, GUILayout.Width(100))) { CenterView(); } if (GUILayout.Button("Focus Origin (O)", EditorStyles.toolbarButton, GUILayout.Width(100))) { FocusOnOrigin(); } GUILayout.FlexibleSpace(); targetGenerator = EditorGUILayout.ObjectField("Target Generator:", targetGenerator, typeof(HybridLevelGenerator), true, GUILayout.Width(250)) as HybridLevelGenerator; EditorGUILayout.EndHorizontal(); }
     private void DrawGraphArea(Rect availableRect) { /* ... unchanged ... */ GUI.Box(availableRect, "", EditorStyles.helpBox); GUI.BeginClip(availableRect); Vector2 graphSize = availableRect.size; DrawGrid(graphSize, gridSnapSize, 0.2f, Color.gray); DrawGrid(graphSize, gridSnapSize * 5f, 0.4f, Color.gray); DrawOriginMarker(graphSize); DrawCoordinateLabels(graphSize); DrawGeneratorBoundsRect(graphSize); DrawConnections(graphSize); DrawNodes(graphSize); if (isCreatingConnection && connectingFromNode != null) { DrawConnectionInProgress(graphSize); } GUI.EndClip(); if (showInstructions && instructionStyle != null && helpContent != null) { float helpWidth = Mathf.Min(350, availableRect.width - 20); float helpHeight = stylesInitialized ? instructionStyle.CalcHeight(helpContent, helpWidth) : 110f; Rect helpRect = new Rect(availableRect.x + 10, availableRect.y + 10, helpWidth, helpHeight); GUI.Box(helpRect, helpContent, instructionStyle); } }
-    private void DrawSidePanels()
-    { /* ... Moved Generate Button ... */
-        EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.Width(Mathf.Max(250, position.width * 0.25f)), GUILayout.ExpandHeight(true));
-        sidePanelScrollPos = EditorGUILayout.BeginScrollView(sidePanelScrollPos);
-
-        // Order: Global Settings -> Create -> Properties
-        DrawGlobalSettingsPanel();
-        EditorGUILayout.Space(10);
-        DrawRoomCreationPanel();
-        EditorGUILayout.Space(10);
-        DrawNodePropertiesPanel(); // Shows only if node selected
-
-        EditorGUILayout.EndScrollView();
-
-        // --- Generate Button at the bottom ---
-        EditorGUILayout.Space(10);
-        Color defaultBg = GUI.backgroundColor;
-        GUI.backgroundColor = Color.green * 1.2f; // Highlight color
-        if (GUILayout.Button("Create Scene Objects & Generate", GUILayout.Height(35)))
-        {
-            CreateSceneObjectsAndGenerate();
-        }
-        GUI.backgroundColor = defaultBg; // Restore color
-        EditorGUILayout.Space(5);
-
-        EditorGUILayout.EndVertical();
-    }
+    private void DrawSidePanels() { /* ... unchanged ... */ EditorGUILayout.BeginVertical(EditorStyles.helpBox, GUILayout.Width(Mathf.Max(250, position.width * 0.25f)), GUILayout.ExpandHeight(true)); sidePanelScrollPos = EditorGUILayout.BeginScrollView(sidePanelScrollPos); DrawGlobalSettingsPanel(); EditorGUILayout.Space(10); DrawRoomCreationPanel(); EditorGUILayout.Space(10); DrawNodePropertiesPanel(); EditorGUILayout.EndScrollView(); EditorGUILayout.Space(10); Color defaultBg = GUI.backgroundColor; GUI.backgroundColor = Color.green * 1.2f; if (GUILayout.Button("Create Scene Objects & Generate", GUILayout.Height(35))) { CreateSceneObjectsAndGenerate(); } GUI.backgroundColor = defaultBg; EditorGUILayout.Space(5); EditorGUILayout.EndVertical(); }
     private void DrawGrid(Vector2 viewSize, float gridSpacing, float gridOpacity, Color gridColor) { /* ... unchanged ... */ Handles.BeginGUI(); Handles.color = new Color(gridColor.r, gridColor.g, gridColor.b, gridOpacity); float zoomedSpacing = gridSpacing * zoom; if (zoomedSpacing < 4f) { Handles.EndGUI(); return; } Vector2 offset = new Vector2(panOffset.x % zoomedSpacing, panOffset.y % zoomedSpacing); int widthDivs = Mathf.CeilToInt(viewSize.x / zoomedSpacing); int heightDivs = Mathf.CeilToInt(viewSize.y / zoomedSpacing); Vector2 originScreenPos = WorldToScreenPosition(Vector2.zero); for (int i = -1; i <= widthDivs; i++) { float x = zoomedSpacing * i + offset.x; bool isOriginLine = Mathf.Abs(x - (originScreenPos.x - graphViewRect.x)) < 1f; Handles.color = isOriginLine ? new Color(0.1f, 0.1f, 0.1f, 0.5f) : new Color(gridColor.r, gridColor.g, gridColor.b, gridOpacity); Handles.DrawLine(new Vector3(x, 0, 0), new Vector3(x, viewSize.y, 0)); } for (int j = -1; j <= heightDivs; j++) { float y = zoomedSpacing * j + offset.y; bool isOriginLine = Mathf.Abs(y - (originScreenPos.y - graphViewRect.y)) < 1f; Handles.color = isOriginLine ? new Color(0.1f, 0.1f, 0.1f, 0.5f) : new Color(gridColor.r, gridColor.g, gridColor.b, gridOpacity); Handles.DrawLine(new Vector3(0, y, 0), new Vector3(viewSize.x, y, 0)); } Handles.color = Color.white; Handles.EndGUI(); }
     private void DrawOriginMarker(Vector2 graphSize) { /* ... unchanged ... */ Vector2 originScreenPos = WorldToScreenPosition(Vector2.zero); float markerSize = 5f * zoom; if (originScreenPos.x >= graphViewRect.x && originScreenPos.x <= graphViewRect.x + graphSize.x && originScreenPos.y >= graphViewRect.y && originScreenPos.y <= graphViewRect.y + graphSize.y) { Handles.BeginGUI(); Handles.color = Color.red; Vector2 screenOriginRelative = originScreenPos - graphViewRect.position; Handles.DrawLine(screenOriginRelative + Vector2.left * markerSize, screenOriginRelative + Vector2.right * markerSize); Handles.DrawLine(screenOriginRelative + Vector2.up * markerSize, screenOriginRelative + Vector2.down * markerSize); Handles.color = Color.white; Handles.EndGUI(); } }
     private void DrawCoordinateLabels(Vector2 viewSize) { /* ... unchanged ... */ if (!stylesInitialized || coordinateLabelStyle == null) return; Handles.BeginGUI(); float majorGridSpacing = gridSnapSize * 5f; float labelSpacing = majorGridSpacing * zoom; if (labelSpacing < 40f) labelSpacing *= 2f; if (labelSpacing < 20f) { Handles.EndGUI(); return; } Vector2 offset = panOffset; Vector2 topLeftWorld = ScreenToWorldPosition(Vector2.zero); Vector2 bottomRightWorld = ScreenToWorldPosition(viewSize); float labelStep = majorGridSpacing; if (labelSpacing < 40f) labelStep *= 2f; float firstWorldX = Mathf.Ceil(topLeftWorld.x / labelStep) * labelStep; float firstWorldY = Mathf.Ceil(topLeftWorld.y / labelStep) * labelStep; for (float worldX = firstWorldX; worldX < bottomRightWorld.x; worldX += labelStep) { Vector2 screenPos = WorldToScreenPosition(new Vector2(worldX, topLeftWorld.y)); if (screenPos.x < graphViewRect.x || screenPos.x > graphViewRect.x + viewSize.x) continue; Rect labelRect = new Rect(screenPos.x + 2, graphViewRect.y + 2, 50, 15); GUI.Label(labelRect, worldX.ToString("F0"), coordinateLabelStyle); } for (float worldY = firstWorldY; worldY < bottomRightWorld.y; worldY += labelStep) { Vector2 screenPos = WorldToScreenPosition(new Vector2(topLeftWorld.x, worldY)); if (screenPos.y < graphViewRect.y || screenPos.y > graphViewRect.y + viewSize.y) continue; Rect labelRect = new Rect(graphViewRect.x + 2, screenPos.y + 2, 50, 15); GUI.Label(labelRect, worldY.ToString("F0"), coordinateLabelStyle); } Handles.EndGUI(); }
@@ -191,16 +99,16 @@ public class VisualLevelDesignEditor : EditorWindow
     private void DrawConnectionInProgress(Vector2 graphSize) { /* ... unchanged ... */ if (connectingFromNode == null) return; Handles.BeginGUI(); Vector2 startPos = WorldToScreenPosition(connectingFromNode.position); Vector2 mousePos = Event.current.mousePosition; Handles.color = Color.yellow; Handles.DrawAAPolyLine(2, startPos, mousePos); Handles.color = Color.white; Handles.EndGUI(); GUI.changed = true; }
     private void DrawRoomCreationPanel() { /* ... unchanged ... */ EditorGUILayout.BeginVertical(EditorStyles.helpBox); EditorGUILayout.LabelField(new GUIContent(" Create New Room", EditorGUIUtility.IconContent("CreateAddNew").image), sectionHeaderStyle); EditorGUILayout.Space(5); newNodeName = EditorGUILayout.TextField("Name:", newNodeName); newNodeType = (NodeType)EditorGUILayout.EnumPopup("Type:", newNodeType); newNodeSize = EditorGUILayout.Vector2IntField("Logical Size:", newNodeSize); if (newNodeType == NodeType.Template) { newTemplateReference = EditorGUILayout.ObjectField("Template Prefab:", newTemplateReference, typeof(GameObject), false) as GameObject; if (targetGenerator != null && targetGenerator.roomTemplatePrefabs != null && targetGenerator.roomTemplatePrefabs.Count > 0) { List<string> names = targetGenerator.roomTemplatePrefabs.Where(p => p != null).Select(p => p.name).ToList(); names.Insert(0, "Select from Generator..."); int currentIndex = newTemplateReference != null ? names.IndexOf(newTemplateReference.name) : 0; if (currentIndex < 0) currentIndex = 0; int newIndex = EditorGUILayout.Popup(" ", currentIndex, names.ToArray()); if (newIndex > 0 && newIndex != currentIndex) { newTemplateReference = targetGenerator.roomTemplatePrefabs.FirstOrDefault(p => p.name == names[newIndex]); } } } if (GUILayout.Button("Create Room", GUILayout.Height(30))) { Vector2 centerPos = graphViewRect.size / 2f; Vector2 worldPos = ScreenToWorldPosition(centerPos); CreateNewNode(worldPos); } EditorGUILayout.EndVertical(); }
     private void DrawGlobalSettingsPanel() { /* ... unchanged ... */ EditorGUILayout.BeginVertical(EditorStyles.helpBox); EditorGUILayout.LabelField(new GUIContent(" Global Node Visuals", EditorGUIUtility.IconContent("Settings").image), sectionHeaderStyle); EditorGUI.BeginChangeCheck(); Vector2 newVisualSize = EditorGUILayout.Vector2Field("Node Visual Size:", globalNodeVisualSize); bool newUseNodeTypeColor = EditorGUILayout.Toggle("Use Color By Node Type", useNodeTypeColor); Color newGlobalColor = globalNodeColor; EditorGUI.BeginDisabledGroup(newUseNodeTypeColor); newGlobalColor = EditorGUILayout.ColorField("Global Node Color:", globalNodeColor); EditorGUI.EndDisabledGroup(); if (EditorGUI.EndChangeCheck()) { Undo.RecordObject(this, "Change Global Node Visuals"); bool updateNodes = false; newVisualSize.x = Mathf.Max(20f, newVisualSize.x); newVisualSize.y = Mathf.Max(20f, newVisualSize.y); if (globalNodeVisualSize != newVisualSize) { globalNodeVisualSize = newVisualSize; updateNodes = true; } if (useNodeTypeColor != newUseNodeTypeColor) { useNodeTypeColor = newUseNodeTypeColor; updateNodes = true; } if (globalNodeColor != newGlobalColor) { globalNodeColor = newGlobalColor; if (!useNodeTypeColor) updateNodes = true; } if (updateNodes) { foreach (var node in nodes) { node.SetVisualSize(globalNodeVisualSize); } GUI.changed = true; } } EditorGUILayout.EndVertical(); }
-    private void DrawNodePropertiesPanel() { /* ... unchanged ... */ if (selectedNode == null) return; EditorGUILayout.BeginVertical(EditorStyles.helpBox); EditorGUILayout.LabelField(new GUIContent($" Properties: {selectedNode.displayName}", EditorGUIUtility.IconContent("d_Prefab Icon").image), sectionHeaderStyle); EditorGUILayout.Space(5); EditorGUI.BeginChangeCheck(); GUI.enabled = false; EditorGUILayout.TextField("Room ID:", selectedNode.id); EditorGUILayout.EnumPopup("Type:", selectedNode.nodeType); EditorGUILayout.Vector2Field("World Position (Center):", selectedNode.position); GUI.enabled = true; selectedNode.displayName = EditorGUILayout.TextField("Name:", selectedNode.displayName); selectedNode.size = EditorGUILayout.Vector2IntField("Logical Size:", selectedNode.size); if (selectedNode.nodeType == NodeType.Template) { GameObject newTemplate = EditorGUILayout.ObjectField("Template Prefab:", selectedNode.templatePrefab, typeof(GameObject), false) as GameObject; if (newTemplate != selectedNode.templatePrefab) { selectedNode.templatePrefab = newTemplate; selectedNode.templateName = newTemplate?.name ?? ""; } } EditorGUILayout.Space(5); EditorGUILayout.LabelField("Connections:", EditorStyles.boldLabel); if (selectedNode.connections.Count == 0) { EditorGUILayout.LabelField("None", EditorStyles.miniLabel); } else { List<string> connectionsToRemove = null; foreach (string connectedId in selectedNode.connections) { DesignerNode connectedNode = nodes.FirstOrDefault(n => n.id == connectedId); if (connectedNode == null) continue; EditorGUILayout.BeginHorizontal(); EditorGUILayout.LabelField($"→ {connectedNode.displayName} ({connectedId})", EditorStyles.miniLabel); if (GUILayout.Button("×", GUILayout.Width(20))) { if (connectionsToRemove == null) connectionsToRemove = new List<string>(); connectionsToRemove.Add(connectedId); } EditorGUILayout.EndHorizontal(); } if (connectionsToRemove != null) { foreach (string idToRemove in connectionsToRemove) { RemoveConnection(selectedNode, nodes.FirstOrDefault(n => n.id == idToRemove)); } } } EditorGUILayout.Space(10); if (GUILayout.Button("Delete Room", GUILayout.Height(25))) { if (EditorUtility.DisplayDialog("Delete Room", $"Delete room \"{selectedNode.displayName}\"?", "Yes", "No")) { DeleteNode(selectedNode); GUIUtility.ExitGUI(); } } if (EditorGUI.EndChangeCheck()) { GUI.changed = true; } EditorGUILayout.EndVertical(); }
+    private void DrawNodePropertiesPanel() { /* ... unchanged ... */ if (selectedNode == null) return; EditorGUILayout.BeginVertical(EditorStyles.helpBox); EditorGUILayout.LabelField(new GUIContent($" Properties: {selectedNode.displayName}", EditorGUIUtility.IconContent("d_Prefab Icon").image), sectionHeaderStyle); EditorGUILayout.Space(5); EditorGUI.BeginChangeCheck(); GUI.enabled = false; EditorGUILayout.TextField("Room ID:", selectedNode.id); EditorGUILayout.EnumPopup("Type:", selectedNode.nodeType); EditorGUILayout.Vector2Field("World Position (Center):", selectedNode.position); GUI.enabled = true; selectedNode.displayName = EditorGUILayout.TextField("Name:", selectedNode.displayName); selectedNode.size = EditorGUILayout.Vector2IntField("Logical Size:", selectedNode.size); if (selectedNode.nodeType == NodeType.Template) { GameObject newTemplate = EditorGUILayout.ObjectField("Template Prefab:", selectedNode.templatePrefab, typeof(GameObject), false) as GameObject; if (newTemplate != selectedNode.templatePrefab) { selectedNode.templatePrefab = newTemplate; selectedNode.templateName = newTemplate?.name ?? ""; } } EditorGUILayout.Space(5); EditorGUILayout.LabelField("Connections:", EditorStyles.boldLabel); if (selectedNode.connections.Count == 0) { EditorGUILayout.LabelField("None", EditorStyles.miniLabel); } else { List<string> connectionsToRemove = null; foreach (string connectedId in selectedNode.connections) { DesignerNode connectedNode = nodes.FirstOrDefault(n => n.id == connectedId); if (connectedNode == null) continue; EditorGUILayout.BeginHorizontal(); EditorGUILayout.LabelField($"→ {connectedNode.displayName} ({connectedId})", EditorStyles.miniLabel); if (GUILayout.Button("×", GUILayout.Width(20))) { if (connectionsToRemove == null) connectionsToRemove = new List<string>(); connectionsToRemove.Add(connectedId); } EditorGUILayout.EndHorizontal(); } if (connectionsToRemove != null) { foreach (string idToRemove in connectionsToRemove) { RemoveConnection(selectedNode, nodes.FirstOrDefault(n => n.id == idToRemove)); } } } EditorGUILayout.Space(10); if (GUILayout.Button("Delete Room", GUILayout.Height(25))) { if (EditorUtility.DisplayDialog("Delete Room", $"Delete room \"{selectedNode.displayName}\"?", "Yes", "No")) { DeleteNode(selectedNode); GUIUtility.ExitGUI(); } } if (EditorGUI.EndChangeCheck()) { hasUnsavedChanges = true; } EditorGUILayout.EndVertical(); }
     // Removed DrawExportPanel
     #endregion
 
     #region Event Handling
-    private void HandleKeyboardShortcuts() { /* ... unchanged ... */ Event e = Event.current; if (e.type == EventType.KeyDown) { if (e.keyCode == KeyCode.Delete || e.keyCode == KeyCode.Backspace) { if (selectedNode != null) { DeleteNode(selectedNode); e.Use(); } else if (selectedConnection != null) { RemoveConnection(selectedConnection.fromNode, selectedConnection.toNode); e.Use(); } } else if (e.keyCode == KeyCode.F) { CenterView(); e.Use(); } else if (e.keyCode == KeyCode.O) { FocusOnOrigin(); e.Use(); } else if (e.keyCode == KeyCode.Escape) { if (isCreatingConnection) { isCreatingConnection = false; connectingFromNode = null; e.Use(); } else if (selectedNode != null || selectedConnection != null) { selectedNode = null; selectedConnection = null; e.Use(); } } } }
+    private void HandleKeyboardShortcuts() { /* ... Added Save/Load ... */ Event e = Event.current; if (e.type == EventType.KeyDown) { if (e.keyCode == KeyCode.Delete || e.keyCode == KeyCode.Backspace) { if (selectedNode != null) { DeleteNode(selectedNode); e.Use(); } else if (selectedConnection != null) { RemoveConnection(selectedConnection.fromNode, selectedConnection.toNode); e.Use(); } } else if (e.control && e.keyCode == KeyCode.S) { SaveDesign(); e.Use(); } else if (e.control && e.shift && e.keyCode == KeyCode.S) { SaveDesignAs(); e.Use(); } else if (e.control && e.keyCode == KeyCode.O) { OpenDesign(); e.Use(); } else if (e.control && e.keyCode == KeyCode.N) { NewDesign(); e.Use(); } else if (e.keyCode == KeyCode.F) { CenterView(); e.Use(); } else if (e.keyCode == KeyCode.O) { FocusOnOrigin(); e.Use(); } else if (e.keyCode == KeyCode.Escape) { if (isCreatingConnection) { isCreatingConnection = false; connectingFromNode = null; e.Use(); } else if (selectedNode != null || selectedConnection != null) { selectedNode = null; selectedConnection = null; e.Use(); } } } }
     private void ProcessEvents(Event e) { /* ... unchanged ... */ switch (e.type) { case EventType.MouseDown: OnMouseDown(e); break; case EventType.MouseUp: OnMouseUp(e); break; case EventType.MouseDrag: OnMouseDrag(e); break; case EventType.ScrollWheel: OnScrollWheel(e); break; case EventType.ContextClick: HandleRightMouseDown(e.mousePosition, e); break; } }
     private void OnMouseDown(Event e) { /* ... unchanged ... */ Vector2 graphSpaceMousePos = ScreenToWorldPosition(e.mousePosition); if (e.button == 0) { HandleLeftMouseDown(graphSpaceMousePos, e); } else if (e.button == 2) { isPanning = true; isDraggingNode = false; isCreatingConnection = false; GUI.FocusControl(null); e.Use(); } }
-    private void OnMouseUp(Event e) { /* ... Added Snapping ... */ if (e.button == 0) { if (isCreatingConnection && connectingFromNode != null) { CompleteConnection(e.mousePosition); } if (isDraggingNode && selectedNode != null) { if (snapToGrid && gridSnapSize > 0) { Vector2 currentPos = selectedNode.position; float snappedX = Mathf.Round(currentPos.x / gridSnapSize) * gridSnapSize; float snappedY = Mathf.Round(currentPos.y / gridSnapSize) * gridSnapSize; selectedNode.SetPosition(new Vector2(snappedX, snappedY)); GUI.changed = true; } isDraggingNode = false; /* Removed hasUnsavedChanges */ } } else if (e.button == 2) { isPanning = false; } foreach (var node in nodes) node.isDragging = false; }
-    private void OnMouseDrag(Event e) { /* ... unchanged ... */ if (e.button == 0 && isDraggingNode && selectedNode != null) { Vector2 worldDelta = e.delta / zoom; selectedNode.SetPosition(selectedNode.position + worldDelta); GUI.changed = true; e.Use(); } else if (e.button == 2 && isPanning) { panOffset += e.delta; GUI.changed = true; e.Use(); } }
+    private void OnMouseUp(Event e) { /* ... Added Snapping & hasUnsavedChanges ... */ if (e.button == 0) { if (isCreatingConnection && connectingFromNode != null) { CompleteConnection(e.mousePosition); } if (isDraggingNode && selectedNode != null) { if (snapToGrid && gridSnapSize > 0) { Vector2 currentPos = selectedNode.position; float snappedX = Mathf.Round(currentPos.x / gridSnapSize) * gridSnapSize; float snappedY = Mathf.Round(currentPos.y / gridSnapSize) * gridSnapSize; if (snappedX != currentPos.x || snappedY != currentPos.y) { selectedNode.SetPosition(new Vector2(snappedX, snappedY)); hasUnsavedChanges = true; } } isDraggingNode = false; } } else if (e.button == 2) { isPanning = false; } foreach (var node in nodes) node.isDragging = false; }
+    private void OnMouseDrag(Event e) { /* ... Added hasUnsavedChanges ... */ if (e.button == 0 && isDraggingNode && selectedNode != null) { Vector2 worldDelta = e.delta / zoom; selectedNode.SetPosition(selectedNode.position + worldDelta); hasUnsavedChanges = true; GUI.changed = true; e.Use(); } else if (e.button == 2 && isPanning) { panOffset += e.delta; GUI.changed = true; e.Use(); } }
     private void OnScrollWheel(Event e) { /* ... unchanged ... */ float zoomDelta = -e.delta.y / 150.0f; float newZoom = zoom + zoomDelta; newZoom = Mathf.Clamp(newZoom, 0.2f, 3.0f); Vector2 mousePos = e.mousePosition; Vector2 worldPos = ScreenToWorldPosition(mousePos); zoom = newZoom; Vector2 newScreenPos = WorldToScreenPosition(worldPos); panOffset += (mousePos - newScreenPos); e.Use(); GUI.changed = true; }
     private void HandleLeftMouseDown(Vector2 worldMousePos, Event e) { /* ... unchanged ... */ bool clickedOnNode = false; selectedConnection = null; for (int i = nodes.Count - 1; i >= 0; i--) { var node = nodes[i]; if (node.rect.Contains(worldMousePos)) { selectedNode = node; isDraggingNode = true; dragStartOffset = worldMousePos - node.position; clickedOnNode = true; GUI.FocusControl(null); e.Use(); break; } } if (!clickedOnNode) { selectedNode = null; GUI.FocusControl(null); } GUI.changed = true; }
     private void HandleRightMouseDown(Vector2 screenMousePos, Event e) { /* ... unchanged ... */ Vector2 worldMousePos = ScreenToWorldPosition(screenMousePos); bool clickedOnNode = false; DesignerNode targetNode = null; for (int i = nodes.Count - 1; i >= 0; i--) { if (nodes[i].rect.Contains(worldMousePos)) { clickedOnNode = true; targetNode = nodes[i]; break; } } GenericMenu menu = new GenericMenu(); if (clickedOnNode) { menu.AddItem(new GUIContent("Delete Room"), false, () => { if (EditorUtility.DisplayDialog("Delete Room", $"Delete room \"{targetNode.displayName}\"?", "Yes", "No")) { DeleteNode(targetNode); } }); menu.AddItem(new GUIContent("Start Connection"), false, () => { connectingFromNode = targetNode; isCreatingConnection = true; }); } else { menu.AddItem(new GUIContent("Create Rect Room"), false, () => CreateNewNode(worldMousePos, NodeType.Rect)); menu.AddItem(new GUIContent("Create L-Shape Room"), false, () => CreateNewNode(worldMousePos, NodeType.LShape)); menu.AddItem(new GUIContent("Create Template Room"), false, () => CreateNewNode(worldMousePos, NodeType.Template)); menu.AddSeparator(""); menu.AddItem(new GUIContent("Center View (F)"), false, CenterView); menu.AddItem(new GUIContent("Focus Origin (O)"), false, FocusOnOrigin); } menu.ShowAsContext(); e.Use(); }
@@ -208,17 +116,7 @@ public class VisualLevelDesignEditor : EditorWindow
     #endregion
 
     #region Node & Connection Management
-    private void CreateNewNode(Vector2 worldPos, NodeType type = NodeType.Rect)
-    { // *** Use global visual size on create ***
-        string baseName = string.IsNullOrEmpty(newNodeName) ? type.ToString() : newNodeName;
-        string id = $"{baseName.Replace(" ", "")}_{nextNodeNumber++}";
-        while (nodes.Any(n => n.id == id)) { id = $"{baseName.Replace(" ", "")}_{nextNodeNumber++}"; }
-        // Pass global visual size to constructor
-        Debug.Log($"Creating node with visual size: {globalNodeVisualSize}");
-        DesignerNode newNode = new DesignerNode(id, type, worldPos, newNodeSize, globalNodeVisualSize, baseName);
-        if (type == NodeType.Template) { newNode.templatePrefab = newTemplateReference; newNode.templateName = newTemplateReference?.name ?? ""; }
-        nodes.Add(newNode); selectedNode = newNode; selectedConnection = null; GUI.changed = true; hasUnsavedChanges = true; // Mark change for save
-    }
+    private void CreateNewNode(Vector2 worldPos, NodeType type = NodeType.Rect) { /* ... Added hasUnsavedChanges ... */ string baseName = string.IsNullOrEmpty(newNodeName) ? type.ToString() : newNodeName; string id = $"{baseName.Replace(" ", "")}_{nextNodeNumber++}"; while (nodes.Any(n => n.id == id)) { id = $"{baseName.Replace(" ", "")}_{nextNodeNumber++}"; } DesignerNode newNode = new DesignerNode(id, type, worldPos, newNodeSize, globalNodeVisualSize, baseName); if (type == NodeType.Template) { newNode.templatePrefab = newTemplateReference; newNode.templateName = newTemplateReference?.name ?? ""; } nodes.Add(newNode); selectedNode = newNode; selectedConnection = null; hasUnsavedChanges = true; GUI.changed = true; }
     private void DeleteNode(DesignerNode nodeToDelete) { /* ... Added hasUnsavedChanges ... */ if (nodeToDelete == null) return; List<Connection> connectionsToRemove = connections.Where(c => c.fromNode == nodeToDelete || c.toNode == nodeToDelete).ToList(); foreach (var conn in connectionsToRemove) { connections.Remove(conn); if (conn.fromNode != nodeToDelete) conn.fromNode?.connections.Remove(nodeToDelete.id); if (conn.toNode != nodeToDelete) conn.toNode?.connections.Remove(nodeToDelete.id); } nodes.Remove(nodeToDelete); if (selectedNode == nodeToDelete) selectedNode = null; selectedConnection = null; hasUnsavedChanges = true; GUI.changed = true; }
     private bool ConnectionExists(DesignerNode from, DesignerNode to) { /* ... unchanged ... */ return connections.Any(c => (c.fromNode == from && c.toNode == to) || (c.fromNode == to && c.toNode == from)); }
     private void AddConnection(DesignerNode from, DesignerNode to) { /* ... Added hasUnsavedChanges ... */ if (from == null || to == null || from == to || ConnectionExists(from, to)) return; Connection newConnection = new Connection(from, to); connections.Add(newConnection); from.connections.Add(to.id); to.connections.Add(from.id); hasUnsavedChanges = true; GUI.changed = true; }
@@ -244,23 +142,22 @@ public class VisualLevelDesignEditor : EditorWindow
     {
         if (hasUnsavedChanges)
         {
-            int choice = EditorUtility.DisplayDialogComplex("Unsaved Changes",
-                "You have unsaved changes in the Visual Level Designer.",
-                "Save", "Don't Save", "Cancel");
-            if (choice == 0) return SaveDesign(); // Save
-            else if (choice == 1) return true; // Don't Save
-            else return false; // Cancel
+            int choice = EditorUtility.DisplayDialogComplex("Unsaved Changes", "You have unsaved changes in the Visual Level Designer.", "Save", "Don't Save", "Cancel");
+            if (choice == 0) return SaveDesign();
+            else if (choice == 1) return true;
+            else return false;
         }
-        return true; // No unsaved changes
+        return true;
     }
 
     private void NewDesign(bool prompt = true)
     {
-        if (prompt && !AskSaveChanges()) return; // Check for unsaved changes if prompting
+        if (prompt && !AskSaveChanges()) return;
         nodes.Clear(); connections.Clear(); panOffset = Vector2.zero; zoom = 1.0f;
         selectedNode = null; selectedConnection = null; connectingFromNode = null;
         isCreatingConnection = false; nextNodeNumber = 1; currentFilePath = "";
-        hasUnsavedChanges = false; // Reset flag
+        hasUnsavedChanges = false;
+        this.titleContent = new GUIContent("Visual Level Designer"); // Reset title
         GUI.changed = true; FocusOnOrigin();
     }
 
@@ -272,10 +169,9 @@ public class VisualLevelDesignEditor : EditorWindow
 
     private bool SaveDesignAs()
     {
-        string path = EditorUtility.SaveFilePanel("Save Level Design As...", "Assets", "NewLevelDesign", "json");
+        string path = EditorUtility.SaveFilePanel("Save Level Design As...", Application.dataPath, "NewLevelDesign", "json");
         if (!string.IsNullOrEmpty(path))
         {
-            // Convert to relative path if inside project
             if (path.StartsWith(Application.dataPath)) { path = "Assets" + path.Substring(Application.dataPath.Length); }
             currentFilePath = path;
             return SaveToFile(currentFilePath);
@@ -298,9 +194,11 @@ public class VisualLevelDesignEditor : EditorWindow
                     nodeType = (int)node.nodeType,
                     x = node.position.x,
                     y = node.position.y,
-                    width = node.size.x,
-                    height = node.size.y,
-                    templateName = node.templateName
+                    logicalWidth = node.size.x,
+                    logicalHeight = node.size.y, // Save logical size
+                    templateName = node.templateName,
+                    visualWidth = node.visualSize.x, // Save visual size
+                    visualHeight = node.visualSize.y
                 });
             }
             foreach (var conn in connections)
@@ -308,12 +206,12 @@ public class VisualLevelDesignEditor : EditorWindow
                 if (conn == null || conn.fromNode == null || conn.toNode == null || conn.fromId == null || conn.toId == null) continue;
                 data.connections.Add(new DesignerData.ConnectionInfo { fromId = conn.fromId, toId = conn.toId });
             }
-            string json = JsonUtility.ToJson(data, true); // Pretty print
+            string json = JsonUtility.ToJson(data, true);
             File.WriteAllText(path, json);
-            hasUnsavedChanges = false; // Mark as saved
+            hasUnsavedChanges = false;
             this.titleContent = new GUIContent("Visual Level Designer"); // Remove asterisk
             Debug.Log($"Level design saved to: {path}");
-            AssetDatabase.Refresh(); // Refresh project window
+            AssetDatabase.Refresh();
             return true;
         }
         catch (Exception e) { Debug.LogError($"Error saving level design to {path}: {e.Message}"); return false; }
@@ -322,29 +220,29 @@ public class VisualLevelDesignEditor : EditorWindow
     private void OpenDesign()
     {
         if (!AskSaveChanges()) return;
-        string path = EditorUtility.OpenFilePanel("Open Level Design", "Assets", "json");
+        string path = EditorUtility.OpenFilePanel("Open Level Design", Application.dataPath, "json");
         if (!string.IsNullOrEmpty(path) && File.Exists(path))
         {
             try
             {
                 string json = File.ReadAllText(path);
                 DesignerData data = JsonUtility.FromJson<DesignerData>(json);
-                if (data == null || data.nodes == null || data.connections == null)
-                {
-                    throw new Exception("Invalid JSON data format.");
-                }
+                if (data == null || data.nodes == null || data.connections == null) { throw new Exception("Invalid JSON data format."); }
 
                 nodes.Clear(); connections.Clear(); nextNodeNumber = 1;
                 Dictionary<string, DesignerNode> nodeMap = new Dictionary<string, DesignerNode>();
 
                 foreach (var nodeInfo in data.nodes)
                 {
-                    if (string.IsNullOrEmpty(nodeInfo.id)) continue; // Skip nodes with no ID
-                                                                     // Update nextNodeNumber based on loaded IDs
+                    if (string.IsNullOrEmpty(nodeInfo.id)) continue;
                     if (nodeInfo.id.Contains("_")) { int num; if (int.TryParse(nodeInfo.id.Split('_').LastOrDefault(), out num)) { nextNodeNumber = Mathf.Max(nextNodeNumber, num + 1); } }
 
-                    // Use global visual size when loading for consistency now
-                    DesignerNode newNode = new DesignerNode(nodeInfo.id, (NodeType)nodeInfo.nodeType, new Vector2(nodeInfo.x, nodeInfo.y), new Vector2Int(nodeInfo.width, nodeInfo.height), globalNodeVisualSize, nodeInfo.displayName);
+                    // *** Use loaded visual size if available, otherwise global default ***
+                    Vector2 loadedVisualSize = (nodeInfo.visualWidth > 0 && nodeInfo.visualHeight > 0)
+                                             ? new Vector2(nodeInfo.visualWidth, nodeInfo.visualHeight)
+                                             : globalNodeVisualSize; // Fallback
+
+                    DesignerNode newNode = new DesignerNode(nodeInfo.id, (NodeType)nodeInfo.nodeType, new Vector2(nodeInfo.x, nodeInfo.y), new Vector2Int(nodeInfo.logicalWidth, nodeInfo.logicalHeight), loadedVisualSize, nodeInfo.displayName);
                     newNode.templateName = nodeInfo.templateName;
                     if (newNode.nodeType == NodeType.Template && targetGenerator != null && !string.IsNullOrEmpty(newNode.templateName)) { newNode.templatePrefab = targetGenerator.roomTemplatePrefabs?.FirstOrDefault(p => p != null && p.name == newNode.templateName); }
                     nodes.Add(newNode);
@@ -355,10 +253,11 @@ public class VisualLevelDesignEditor : EditorWindow
                     if (!string.IsNullOrEmpty(connInfo.fromId) && !string.IsNullOrEmpty(connInfo.toId) &&
                         nodeMap.TryGetValue(connInfo.fromId, out DesignerNode from) && nodeMap.TryGetValue(connInfo.toId, out DesignerNode to))
                     {
-                        AddConnection(from, to); // Use AddConnection to handle lists correctly
+                        AddConnection(from, to);
                     }
-                    else { Debug.LogWarning($"Skipping invalid connection: {connInfo.fromId} -> {connInfo.toId}"); }
+                    else { Debug.LogWarning($"Skipping invalid connection on load: {connInfo.fromId} -> {connInfo.toId}"); }
                 }
+                if (path.StartsWith(Application.dataPath)) { path = "Assets" + path.Substring(Application.dataPath.Length); }
                 currentFilePath = path; hasUnsavedChanges = false; selectedNode = null; selectedConnection = null;
                 CenterView(); GUI.changed = true; this.titleContent = new GUIContent("Visual Level Designer");
                 Debug.Log($"Level design loaded from: {path}");
@@ -378,11 +277,17 @@ public class VisualLevelDesignEditor : EditorWindow
         if (designRoot == null) { designRoot = new GameObject("LevelDesignRoot"); Undo.RegisterCreatedObjectUndo(designRoot, "Create Level Design Root"); }
         else { int childCount = designRoot.transform.childCount; for (int i = childCount - 1; i >= 0; i--) { Undo.DestroyObjectImmediate(designRoot.transform.GetChild(i).gameObject); } }
 
+        // Assign layer for hiding (User needs to create layer and set camera culling)
+        int designLayer = LayerMask.NameToLayer("LevelDesignNodes");
+        if (designLayer == -1) { Debug.LogWarning("Layer 'LevelDesignNodes' not found. Please create it in Project Settings -> Tags and Layers. Scene nodes will be visible."); designLayer = 0; } // Default layer if not found
+        designRoot.layer = designLayer;
+
         Dictionary<string, RoomNode> createdNodeComponents = new Dictionary<string, RoomNode>();
         foreach (var node in nodes)
         {
             GameObject nodeGO = new GameObject(node.displayName); Undo.RegisterCreatedObjectUndo(nodeGO, "Create Room Node Object"); nodeGO.transform.SetParent(designRoot.transform);
             nodeGO.transform.position = new Vector3(node.position.x, node.position.y, 0);
+            nodeGO.layer = designLayer; // Assign layer
             RoomNode rnComponent = Undo.AddComponent<RoomNode>(nodeGO); rnComponent.roomId = node.id; rnComponent.roomType = node.nodeType; rnComponent.roomTemplatePrefab = node.templatePrefab; rnComponent.roomSize = node.size; rnComponent.connectedRooms = new List<RoomNode>(); createdNodeComponents[node.id] = rnComponent;
         }
         foreach (var connection in connections)
@@ -397,10 +302,10 @@ public class VisualLevelDesignEditor : EditorWindow
         }
         foreach (var comp in createdNodeComponents.Values) EditorUtility.SetDirty(comp);
 
-        Debug.Log($"Created {nodes.Count} RoomNode GameObjects under '{designRoot.name}'.");
+        Debug.Log($"Created {nodes.Count} RoomNode GameObjects under '{designRoot.name}'. Assigned to layer {LayerMask.LayerToName(designLayer)}.");
 
         Undo.RecordObject(targetGenerator, "Set Generation Mode and Generate");
-        targetGenerator.generationMode = GenerationMode.UserDefinedLayout;
+        targetGenerator.generationMode = GenerationMode.UserDefinedLayout; // Use the correct enum name
         EditorUtility.SetDirty(targetGenerator);
         Debug.Log($"Set {targetGenerator.name} mode to UserDefinedLayout and generating...");
         targetGenerator.GenerateLevel();
