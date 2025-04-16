@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Unity Asset Dependency Graph</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2, h3 { color: #333; }
+        .stats { background-color: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
+        .search { margin-bottom: 20px; }
+        #searchInput { width: 100%; padding: 8px; box-sizing: border-box; }
+        .asset-item { border: 1px solid #ddd; margin-bottom: 8px; padding: 8px; border-radius: 4px; }
+        .asset-item:hover { background-color: #f0f0f0; }
+        .asset-name { font-weight: bold; }
+        .asset-path { color: #666; font-size: 0.9em; }
+        .asset-stats { color: #333; margin-top: 5px; }
+        .used { background-color: #e8f5e9; }
+        .unused { background-color: #ffebee; }
+        .corrupted { background-color: #fff3e0; }
+        .dependency-list { margin-left: 20px; margin-top: 5px; }
+        .dependency-item { padding: 2px 5px; margin: 2px 0; border-radius: 3px; display: inline-block; margin-right: 5px; }
+        .toggle-btn { cursor: pointer; color: blue; text-decoration: underline; }
+        .hidden { display: none; }
+    </style>
+    <script>
+        function filterAssets() {
+            var input = document.getElementById('searchInput').value.toLowerCase();
+            var assets = document.getElementsByClassName('asset-item');
+            for (var i = 0; i < assets.length; i++) {
+                var assetText = assets[i].textContent.toLowerCase();
+                if (assetText.includes(input)) {
+                    assets[i].style.display = '';
+                } else {
+                    assets[i].style.display = 'none';
+                }
+            }
+        }
+        function toggleDependencies(id) {
+            var element = document.getElementById(id);
+            if (element.classList.contains('hidden')) {
+                element.classList.remove('hidden');
+            } else {
+                element.classList.add('hidden');
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Unity Asset Dependency Graph</h1>
+    <div class='stats'>
+        <p><strong>Total Assets:</strong> 106 | <strong>Used Assets:</strong> 76 | <strong>Unused Assets:</strong> 30</p>
+        <p><strong>Total Size:</strong> 2.5 MB | <strong>Unused Size:</strong> 105.31 KB (4.1%)</p>
+        <p><strong>Corrupted Assets:</strong> 0</p>
+        <p><strong>Report Generated:</strong> 2025-04-14 20:34:38</p>
+    </div>
+    <div class='search'>
+        <input type='text' id='searchInput' placeholder='Search assets...' onkeyup='filterAssets()' />
+    </div>
+    <h2>Unused Assets</h2>
+    <div class='asset-item unused' id='asset-0'>
+        <div class='asset-name'>Prefabs</div>
+        <div class='asset-path'>Assets/Prefabs</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-1'>
+        <div class='asset-name'>Resources</div>
+        <div class='asset-path'>Assets/Resources</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-2'>
+        <div class='asset-name'>Scenes</div>
+        <div class='asset-path'>Assets/Scenes</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-3'>
+        <div class='asset-name'>Scripts</div>
+        <div class='asset-path'>Assets/Scripts</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-4'>
+        <div class='asset-name'>Core</div>
+        <div class='asset-path'>Assets/Scripts/Core</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-5'>
+        <div class='asset-name'>Features</div>
+        <div class='asset-path'>Assets/Scripts/Features</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-6'>
+        <div class='asset-name'>LevelGeneration</div>
+        <div class='asset-path'>Assets/Scripts/LevelGeneration</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-7'>
+        <div class='asset-name'>Triggers</div>
+        <div class='asset-path'>Assets/Scripts/Triggers</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-8'>
+        <div class='asset-name'>Utilities</div>
+        <div class='asset-path'>Assets/Scripts/Utilities</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-9'>
+        <div class='asset-name'>TilePalette</div>
+        <div class='asset-path'>Assets/TilePalette</div>
+        <div class='asset-stats'>Type: , Size: 0 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-10'>
+        <div class='asset-name'>LevelGenerationTypes.cs</div>
+        <div class='asset-path'>Assets/LevelGenerationTypes.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 2.77 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-11'>
+        <div class='asset-name'>DecoratorManager.cs</div>
+        <div class='asset-path'>Assets/Scripts/Core/DecoratorManager.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 2.22 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-12'>
+        <div class='asset-name'>LevelGenerator.cs</div>
+        <div class='asset-path'>Assets/Scripts/Core/LevelGenerator.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 6.27 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-13'>
+        <div class='asset-name'>RoomGenerator.cs</div>
+        <div class='asset-path'>Assets/Scripts/Core/RoomGenerator.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 2.01 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-14'>
+        <div class='asset-name'>TileGenerator.cs</div>
+        <div class='asset-path'>Assets/Scripts/Core/TileGenerator.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 1.13 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-15'>
+        <div class='asset-name'>DecoratorSpawner.cs</div>
+        <div class='asset-path'>Assets/Scripts/Features/DecoratorSpawner.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 879 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-16'>
+        <div class='asset-name'>EnemySpawner.cs</div>
+        <div class='asset-path'>Assets/Scripts/Features/EnemySpawner.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 1.16 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-17'>
+        <div class='asset-name'>PlayerSpawner.cs</div>
+        <div class='asset-path'>Assets/Scripts/Features/PlayerSpawner.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 665 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-18'>
+        <div class='asset-name'>RoomNode.cs</div>
+        <div class='asset-path'>Assets/Scripts/LevelGeneration/RoomNode.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 6.03 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-19'>
+        <div class='asset-name'>EndTrigger.cs</div>
+        <div class='asset-path'>Assets/Scripts/Triggers/EndTrigger.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 575 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-20'>
+        <div class='asset-name'>StartTrigger.cs</div>
+        <div class='asset-path'>Assets/Scripts/Triggers/StartTrigger.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 489 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-21'>
+        <div class='asset-name'>GridUtils.cs</div>
+        <div class='asset-path'>Assets/Scripts/Utilities/GridUtils.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 888 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-22'>
+        <div class='asset-name'>RandomUtils.cs</div>
+        <div class='asset-path'>Assets/Scripts/Utilities/RandomUtils.cs</div>
+        <div class='asset-stats'>Type: .cs, Size: 826 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-23'>
+        <div class='asset-name'>HybridLevelGenerator_Design.json</div>
+        <div class='asset-path'>Assets/HybridLevelGenerator_Design.json</div>
+        <div class='asset-stats'>Type: .json, Size: 1.08 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-24'>
+        <div class='asset-name'>NewLevelDesign.json</div>
+        <div class='asset-path'>Assets/NewLevelDesign.json</div>
+        <div class='asset-stats'>Type: .json, Size: 1.67 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-25'>
+        <div class='asset-name'>New Material 1.mat</div>
+        <div class='asset-path'>Assets/New Material 1.mat</div>
+        <div class='asset-stats'>Type: .mat, Size: 2.17 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-26'>
+        <div class='asset-name'>New Material.mat</div>
+        <div class='asset-path'>Assets/New Material.mat</div>
+        <div class='asset-stats'>Type: .mat, Size: 2.16 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-27'>
+        <div class='asset-name'>UserGenerated_Palette.prefab</div>
+        <div class='asset-path'>Assets/TilePalette/UserGenerated_Palette.prefab</div>
+        <div class='asset-stats'>Type: .prefab, Size: 7.47 KB, Dependencies: 8, Referenced by: 0</div>
+        <div><span class='toggle-btn' onclick="toggleDependencies('depends-27')">Dependencies ▼</span></div>
+        <div class='dependency-list hidden' id='depends-27'>
+            <div class='dependency-item used'>FloorTile.asset</div>
+            <div class='dependency-item used'>spritesheet_tiles.png</div>
+            <div class='dependency-item used'>spritesheet_tiles_3g54.asset</div>
+            <div class='dependency-item used'>spritesheet_tiles_40f3.asset</div>
+            <div class='dependency-item used'>spritesheet_tiles_d406.asset</div>
+            <div class='dependency-item used'>TX Tileset Grass.png</div>
+            <div class='dependency-item used'>TX Tileset Stone Ground.png</div>
+            <div class='dependency-item used'>WallTile.asset</div>
+        </div>
+    </div>
+    <div class='asset-item unused' id='asset-28'>
+        <div class='asset-name'>LevelPreviewRenderTexture.renderTexture</div>
+        <div class='asset-path'>Assets/LevelPreviewRenderTexture.renderTexture</div>
+        <div class='asset-stats'>Type: .rendertexture, Size: 870 B, Dependencies: 0, Referenced by: 0</div>
+    </div>
+    <div class='asset-item unused' id='asset-29'>
+        <div class='asset-name'>AssetPCG.unitypackage</div>
+        <div class='asset-path'>Assets/AssetPCG.unitypackage</div>
+        <div class='asset-stats'>Type: .unitypackage, Size: 64.09 KB, Dependencies: 0, Referenced by: 0</div>
+    </div>
+</body>
+</html>

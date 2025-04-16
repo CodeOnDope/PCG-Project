@@ -1,0 +1,77 @@
+Asset Path,Type,Size (bytes),Last Modified,Dependencies Count,Referenced By Count
+"Assets/Resources/Prefabs/Bush.prefab",.prefab,4358,2025-04-08 22:28:57,1,1
+"Assets/Resources/Tiles/sheet.png",.png,55974,2024-05-21 11:18:02,0,1
+"Assets/Resources/Tiles/Basic_Grass_Biom_things.png",.png,6129,2022-01-05 08:19:24,0,9
+"Assets/Resources/Tiles/tilesheet_complete.png",.png,167126,2016-01-13 07:19:57,0,0
+"Assets/Resources/Tiles/spritesheet_tiles_d406.asset",.asset,797,2025-04-12 22:18:07,1,1
+"Assets/Resources/Tiles/DecorationTile 6.asset",.asset,652,2025-04-08 23:11:11,3,5
+"Assets/Resources/Prefabs/Tree.prefab",.prefab,4355,2025-04-08 22:28:57,1,9
+"Assets/Resources/Tiles/Beast.png",.png,3837,2023-08-30 04:34:39,0,4
+"Assets/Resources/Prefabs/Player.prefab",.prefab,6352,2025-04-06 21:14:00,4,9
+"Assets/Resources/Prefabs/Enemy'sBullet.prefab",.prefab,4565,2025-04-06 19:01:07,2,4
+"Assets/Resources/Prefabs/WoodLay.prefab",.prefab,4342,2025-04-08 22:28:57,1,0
+"Assets/Resources/Prefabs/Treasure_room.prefab",.prefab,34724,2025-04-13 17:12:03,4,5
+"Assets/Resources/Tiles/Dungeon_Tileset.png",.png,6326,2018-12-06 23:47:44,0,5
+"Assets/Resources/Prefabs/SmallClassRoom.prefab",.prefab,36653,2025-04-13 17:12:03,4,6
+"Assets/Resources/Configurations/PCGSettings.asset",.asset,389,2025-04-06 07:41:14,0,0
+"Assets/Resources/ScriptableObjects/LevelTheme.asset",.asset,952,2025-04-09 00:59:23,5,5
+"Assets/Resources/Prefabs/Boss.prefab",.prefab,6165,2025-04-09 00:46:10,3,5
+"Assets/Resources/Animations/Coin.anim",.anim,4005,2025-04-06 17:41:55,1,1
+"Assets/Resources/Tiles/spritesheet_tiles.png",.png,175708,2016-01-13 07:31:49,0,7
+"Assets/Resources/Prefabs/End.prefab",.prefab,4331,2025-04-08 22:28:57,1,0
+"Assets/Resources/ScriptableObjects",,0,0001-01-01 00:00:00,0,0
+"Assets/Resources/Prefabs/Exit.prefab",.prefab,2480,2025-04-09 00:51:22,1,5
+"Assets/Resources/Tiles/DecorationTile 1.asset",.asset,652,2025-04-08 23:09:22,3,0
+"Assets/Resources/Animations/Coin.controller",.controller,2016,2025-04-06 17:41:55,1,1
+"Assets/Resources/Tiles/DecorationTile 5.asset",.asset,653,2025-04-08 23:09:22,3,5
+"Assets/Resources/Prefabs/Decorator.prefab",.prefab,41,2025-04-06 07:41:12,0,0
+"Assets/Resources/Tiles/TX Tileset Grass.png",.png,11016,2025-04-05 00:08:45,0,16
+"Assets/Resources/Prefabs/Enemy.prefab",.prefab,6173,2025-04-06 21:14:04,3,10
+"Assets/Resources/Tiles/DecorationTile 4.asset",.asset,586,2025-04-08 23:09:22,2,5
+"Assets/Resources/Prefabs/WallTile.prefab",.prefab,2460,2025-04-06 20:41:59,1,0
+"Assets/Resources/Prefabs/WoodStand.prefab",.prefab,4351,2025-04-08 22:28:57,1,0
+"Assets/Resources/Tiles/DecorationTile 2.asset",.asset,586,2025-04-08 23:09:22,2,5
+"Assets/Resources/Tiles/Adam_idle_16x16.png",.png,1993,2020-12-10 03:34:36,0,4
+"Assets/Resources/Tiles/spritesheet_tiles_3g54.asset",.asset,797,2025-04-12 22:17:50,1,1
+"Assets/Resources/Tiles/TX Tileset Wall.png",.png,17213,2025-04-05 00:08:45,0,0
+"Assets/Resources/Prefabs",,0,0001-01-01 00:00:00,0,0
+"Assets/Resources/Tiles/DecorationTile 3.asset",.asset,586,2025-04-08 23:09:22,2,5
+"Assets/Resources/Tiles/spritesheet_tiles_40f3.asset",.asset,796,2025-04-12 22:18:02,1,1
+"Assets/Resources/Tiles/tilesmall.jpg",.jpg,3695,2025-04-06 08:50:42,0,0
+"Assets/Resources/Tiles/DoorTile.asset",.asset,577,2025-04-09 00:52:49,2,5
+"Assets/Resources/Tiles/coin.png",.png,500,2024-03-08 17:31:50,0,2
+"Assets/Resources/Prefabs/Player'sBullet.prefab",.prefab,4561,2025-04-06 19:00:53,2,4
+"Assets/Resources/Tiles/spritesheet_characters.png",.png,47885,2016-01-28 06:59:24,0,0
+"Assets/Resources/Tiles/crosshairs64.png",.png,35195,2013-03-29 23:39:40,0,0
+"Assets/Resources/Prefabs/Door.prefab",.prefab,2480,2025-04-09 00:51:19,1,5
+"Assets/Resources/Configurations",,0,0001-01-01 00:00:00,0,0
+"Assets/Resources/Tiles/DecorationTile.asset",.asset,575,2025-04-08 23:06:13,2,6
+"Assets/Resources/Animations",,0,0001-01-01 00:00:00,0,0
+"Assets/Resources/Prefabs/FloorTile.prefab",.prefab,2468,2025-04-06 20:41:56,1,0
+"Assets/Resources/Tiles/TX Tileset Stone Ground_9.prefab",.prefab,2484,2025-04-06 08:45:35,1,11
+"Assets/Resources/Prefabs/BossRoom.prefab",.prefab,25712,2025-04-13 17:12:03,4,5
+"Assets/Resources/Tiles/WallTile.asset",.asset,1110,2025-04-06 08:54:12,2,16
+"Assets/Resources/Prefabs/Start.prefab",.prefab,4343,2025-04-08 22:28:57,1,3
+"Assets/Resources/Tiles/DecorationTile 7.asset",.asset,586,2025-04-09 00:59:23,2,5
+"Assets/Resources/Tiles",,0,0001-01-01 00:00:00,0,0
+"Assets/Resources/Tiles/TX Tileset Stone Ground.png",.png,8503,2025-04-05 00:08:45,0,11
+"Assets/Resources/Tiles/FloorTile.asset",.asset,1125,2025-04-06 08:54:12,2,16
+"Assets/Resources/Prefabs/Coin.prefab",.prefab,4783,2025-04-08 22:28:57,2,4
+"Assets/Scenes/V2.2.unity",.unity,48384,2025-04-12 22:12:31,23,0
+"Assets/Scripts/LevelGeneration/HybridLevelGenerator.cs",.cs,39102,2025-04-14 18:19:42,0,11
+"Assets/Scripts/CameraFollow.cs",.cs,968,2025-04-06 21:13:06,0,10
+"Assets/Scenes/V2.unity",.unity,478437,2025-04-12 14:41:17,31,0
+"Assets/Scripts/Core/PlayerController.cs",.cs,12487,2025-04-06 18:28:33,0,4
+"Assets/InputSystem_Actions.inputactions",.inputactions,41005,2025-01-21 02:50:18,3,4
+"Assets/Scripts/Core/EnemyAI.cs",.cs,17658,2025-04-06 19:00:21,0,4
+"Assets/Scenes/V4.unity",.unity,39028,2025-04-14 17:34:32,12,0
+"Assets/Scenes/V4.1.unity",.unity,35778,2025-04-14 18:37:17,11,0
+"Assets/Scenes/V1.1.unity",.unity,20632,2025-04-06 21:24:46,9,0
+"Assets/Scenes/V3.1 - System and Hybrid.unity",.unity,46942,2025-04-14 00:30:51,25,0
+"Assets/Scenes/V2.1.unity",.unity,451899,2025-04-13 08:29:19,34,0
+"Assets/Scenes/V5.unity",.unity,35778,2025-04-14 19:32:48,11,0
+"Assets/Scenes/SampleScene.unity",.unity,244272,2025-04-06 08:54:12,6,0
+"Assets/Scenes/V1.2.unity",.unity,42160,2025-04-09 00:59:23,21,0
+"Assets/Scenes/V1.unity",.unity,229048,2025-04-06 11:10:15,11,0
+"Assets/Scripts/Core/EnemyBullet.cs",.cs,1220,2025-04-06 18:15:56,0,1
+"Assets/Scripts/Core/Bullet.cs",.cs,1217,2025-04-06 15:19:26,0,1

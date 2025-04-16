@@ -492,7 +492,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!1839735485 &303587407
 Tilemap:
   m_ObjectHideFlags: 0
@@ -872,7 +872,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1513887056
 Transform:
   m_ObjectHideFlags: 0
@@ -1266,35 +1266,35 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d94a319dab8d3284d983c4def114753e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  generationMode: 0
-  levelWidth: 100
-  levelHeight: 100
+  generationMode: 1
+  levelWidth: 50
+  levelHeight: 50
   minRoomSize: 8
-  maxIterations: 10
-  roomPadding: 2
-  lShapeProbability: 0.539
-  minLLegRatio: 0.372
-  maxLLegRatio: 0.767
+  maxIterations: 7
+  roomPadding: 2.96
+  lShapeProbability: 0.34
+  minLLegRatio: 0.2
+  maxLLegRatio: 0.2
   defaultSceneNodeSize: {x: 10, y: 10}
   roomTemplatePrefabs:
-  - {fileID: 6718998220024841746, guid: e4808451890a5b94daf38c184dfaf3b4, type: 3}
   - {fileID: 7043603121092860813, guid: dde2c204afdbb9a49b0c45a55ac5cdd3, type: 3}
   - {fileID: 5414685687059046652, guid: 242867fe6a381ae42a9ff1bd47ac71ec, type: 3}
-  roomTemplateProbability: 0.964
+  - {fileID: 6718998220024841746, guid: e4808451890a5b94daf38c184dfaf3b4, type: 3}
+  roomTemplateProbability: 0.391
   corridorWidth: 3
   groundTilemap: {fileID: 59786515}
   wallTilemap: {fileID: 1521400880}
   floorTile: {fileID: 11400000, guid: 3f5b5b050a99feb4e98a954f647d17e6, type: 2}
   wallTile: {fileID: 11400000, guid: fd1a932b63d942046be33904a6e02fc0, type: 2}
-  seed: 349525203
+  seed: 518344765
   useRandomSeed: 1
   playerPrefab: {fileID: 3548798236488958899, guid: 233e123314ae4e948bcc465afc76dfb9, type: 3}
   enemyPrefab: {fileID: 7773039407867173279, guid: a722c0378e102014a9dfbe64ebc335bf, type: 3}
   decorationPrefab: {fileID: 5577925952059883224, guid: 02eddd388e6544a4bb5a808e7b0ee2e2, type: 3}
   enemiesPerRoom: 2
   decorationsPerRoom: 3
-  levelPreviewTexture: {fileID: 0}
-  levelPreviewCamera: {fileID: 0}
+  levelPreviewTexture: {fileID: 8400000, guid: ad6b8f7f32431904899cba4c38769122, type: 2}
+  levelPreviewCamera: {fileID: 519420031}
 --- !u!4 &1579120278
 Transform:
   m_ObjectHideFlags: 0
