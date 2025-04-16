@@ -996,17 +996,11 @@ public class HybridLevelGeneratorEditor : Editor
 
 
 
-using UnityEngine;
+/*using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 using System;
 using UnityEditorInternal;
-
-// Note: Assumes GenerationMode enum is defined in a separate shared file like LevelGenerationData.cs
-// Example: public enum GenerationMode { FullyProcedural, HybridProcedural, UserDefinedLayout }
-
-// Note: Assumes VisualLevelDesignEditor class with ShowWindow() exists if using UserDefinedLayout mode.
-// Example: public static class VisualLevelDesignEditor { public static void ShowWindow() { /* ... */ } }
 
 
 [CustomEditor(typeof(HybridLevelGenerator))]
@@ -1576,4 +1570,1538 @@ public class HybridLevelGeneratorEditor : Editor
 
     // ShowNotification method remains the same
     private void ShowNotification(GUIContent content) { Debug.Log($"Notification: {content.text}"); EditorWindow window = EditorWindow.focusedWindow; if (window != null) { window.ShowNotification(content); } }
+}*/
+
+/*using UnityEngine;
+using UnityEditor;
+using System.Collections.Generic;
+using System;
+
+// Note: Assumes GenerationMode enum is defined in a separate shared file.
+[CustomEditor(typeof(HybridLevelGenerator))]
+public class HybridLevelGeneratorEditor : Editor
+{
+    // --- Serialized Properties ---
+    SerializedProperty generationModeProp;
+    SerializedProperty levelWidthProp;
+    SerializedProperty levelHeightProp;
+    SerializedProperty minRoomSizeProp;
+    SerializedProperty maxIterationsProp;
+    SerializedProperty roomPaddingProp;
+    SerializedProperty lShapeProbabilityProp;
+    SerializedProperty minLLegRatioProp;
+    SerializedProperty maxLLegRatioProp;
+    SerializedProperty roomTemplatePrefabsProp;
+    SerializedProperty roomTemplateProbabilityProp;
+    SerializedProperty corridorWidthProp;
+    SerializedProperty groundTilemapProp;
+    SerializedProperty wallTilemapProp;
+    SerializedProperty floorTileProp;
+    SerializedProperty wallTileProp;
+    SerializedProperty seedProp;
+    SerializedProperty useRandomSeedProp;
+    SerializedProperty playerPrefabProp;
+    SerializedProperty enemyPrefabProp;
+    SerializedProperty decorationPrefabProp;
+    SerializedProperty enemiesPerRoomProp;
+    SerializedProperty decorationsPerRoomProp;
+    SerializedProperty levelPreviewTextureProp;
+    SerializedProperty levelPreviewCameraProp;
+
+    // --- UI States ---
+    private int selectedTab = 0;
+    private string[] tabNames = new string[] { "Setup", "Room Generation", "Entities", "Preview" };
+    private bool autoPreviewEnabled = true;
+    private float lastChangeTime;
+    private const float AUTO_PREVIEW_DELAY = 0.5f; // Seconds to wait before auto-generating preview
+    private bool needsPreviewUpdate = false;
+    private bool isInitialSetup = true;
+
+    // --- Colors ---
+    private readonly Color headerColor = new Color(0.22f, 0.51f, 0.89f);
+    private readonly Color accentColor = new Color(0.3f, 0.6f, 1f);
+    private readonly Color generateColor = new Color(0.15f, 0.75f, 0.5f);
+    private readonly Color clearColor = new Color(0.85f, 0.25f, 0.25f);
+
+    // --- Quick-help feature ---
+    private int quickHelpStep = -1;
+    private string[] quickHelpMessages = new string[] {
+        "Start by selecting a Generation Mode. Fully Procedural uses pure BSP, while Hybrid allows for template rooms.",
+        "Configure your Level Dimensions and use Auto-Preview to see changes in real-time.",
+        "Adjust BSP Settings to control how the level is initially partitioned.",
+        "Make your levels unique with L-shaped rooms and Room Templates.",
+        "Customize Corridors to connect your rooms perfectly.",
+        "Add Players, Enemies, and Decorations to bring your level to life!",
+        "Use the Preview Tab to visualize your level before generating. Click Generate Level when ready!"
+    };
+
+    private void OnEnable()
+    {
+        // Find properties
+        generationModeProp = serializedObject.FindProperty("generationMode");
+        levelWidthProp = serializedObject.FindProperty("levelWidth");
+        levelHeightProp = serializedObject.FindProperty("levelHeight");
+        minRoomSizeProp = serializedObject.FindProperty("minRoomSize");
+        maxIterationsProp = serializedObject.FindProperty("maxIterations");
+        roomPaddingProp = serializedObject.FindProperty("roomPadding");
+        lShapeProbabilityProp = serializedObject.FindProperty("lShapeProbability");
+        minLLegRatioProp = serializedObject.FindProperty("minLLegRatio");
+        maxLLegRatioProp = serializedObject.FindProperty("maxLLegRatio");
+        roomTemplatePrefabsProp = serializedObject.FindProperty("roomTemplatePrefabs");
+        roomTemplateProbabilityProp = serializedObject.FindProperty("roomTemplateProbability");
+        corridorWidthProp = serializedObject.FindProperty("corridorWidth");
+        groundTilemapProp = serializedObject.FindProperty("groundTilemap");
+        wallTilemapProp = serializedObject.FindProperty("wallTilemap");
+        floorTileProp = serializedObject.FindProperty("floorTile");
+        wallTileProp = serializedObject.FindProperty("wallTile");
+        seedProp = serializedObject.FindProperty("seed");
+        useRandomSeedProp = serializedObject.FindProperty("useRandomSeed");
+        playerPrefabProp = serializedObject.FindProperty("playerPrefab");
+        enemyPrefabProp = serializedObject.FindProperty("enemyPrefab");
+        decorationPrefabProp = serializedObject.FindProperty("decorationPrefab");
+        enemiesPerRoomProp = serializedObject.FindProperty("enemiesPerRoom");
+        decorationsPerRoomProp = serializedObject.FindProperty("decorationsPerRoom");
+        levelPreviewTextureProp = serializedObject.FindProperty("levelPreviewTexture");
+        levelPreviewCameraProp = serializedObject.FindProperty("levelPreviewCamera");
+
+        // Register for editor updates (for auto-preview)
+        EditorApplication.update += OnEditorUpdate;
+    }
+
+    private void OnDisable()
+    {
+        // Unregister from editor updates
+        EditorApplication.update -= OnEditorUpdate;
+    }
+
+    private void OnEditorUpdate()
+    {
+        // Handle auto-preview
+        if (autoPreviewEnabled && needsPreviewUpdate &&
+            (EditorApplication.timeSinceStartup - lastChangeTime) > AUTO_PREVIEW_DELAY)
+        {
+            needsPreviewUpdate = false;
+            Repaint();
+        }
+    }
+
+    public override void OnInspectorGUI()
+    {
+        serializedObject.Update();
+
+        Color defaultBgColor = GUI.backgroundColor;
+
+        // Check for changes to update preview
+        EditorGUI.BeginChangeCheck();
+
+        // Draw stylish header
+        DrawHeader();
+
+        // Draw tabs
+        DrawTabs();
+
+        // Draw tab content
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+        switch (selectedTab)
+        {
+            case 0: // Setup Tab
+                DrawSetupTab();
+                break;
+            case 1: // Room Generation Tab
+                DrawRoomGenerationTab();
+                break;
+            case 2: // Entities Tab
+                DrawEntitiesTab();
+                break;
+            case 3: // Preview Tab
+                DrawPreviewTab();
+                break;
+        }
+        EditorGUILayout.EndVertical();
+
+        // Bottom action controls - always visible
+        EditorGUILayout.Space(10);
+        EditorGUILayout.BeginHorizontal();
+
+        // Generate Button
+        GUI.backgroundColor = generateColor;
+        if (GUILayout.Button("Generate Level", GUILayout.Height(40)))
+        {
+            HybridLevelGenerator generator = (HybridLevelGenerator)target;
+            Undo.RecordObject(generator, "Generate Level");
+            generator.GenerateLevel();
+            MarkSceneDirty(generator);
+
+            // Show notification
+            EditorWindow.focusedWindow?.ShowNotification(new GUIContent("Level Generated!"));
+        }
+
+        // Clear Button
+        GUI.backgroundColor = clearColor;
+        if (GUILayout.Button("Clear Level", GUILayout.Height(40)))
+        {
+            HybridLevelGenerator generator = (HybridLevelGenerator)target;
+            if (EditorUtility.DisplayDialog("Confirm Clear",
+                "Clear generated level AND scene design nodes?",
+                "Clear All", "Cancel"))
+            {
+                Undo.RecordObject(generator, "Clear Level");
+                generator.ClearLevel();
+                MarkSceneDirty(generator);
+
+                // Show notification
+                EditorWindow.focusedWindow?.ShowNotification(new GUIContent("Level Cleared"));
+            }
+        }
+
+        GUI.backgroundColor = defaultBgColor;
+        EditorGUILayout.EndHorizontal();
+
+        // Show Quick-Help if enabled
+        if (quickHelpStep >= 0 && quickHelpStep < quickHelpMessages.Length)
+        {
+            EditorGUILayout.Space(10);
+            EditorGUILayout.HelpBox($"TIP {quickHelpStep + 1}/{quickHelpMessages.Length}: {quickHelpMessages[quickHelpStep]}",
+                MessageType.Info);
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button(quickHelpStep < quickHelpMessages.Length - 1 ? "Next Tip" : "Close Help",
+                GUILayout.Width(100)))
+            {
+                quickHelpStep++;
+                if (quickHelpStep >= quickHelpMessages.Length)
+                {
+                    quickHelpStep = -1;
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        // Check if any property was modified and mark for preview update
+        if (EditorGUI.EndChangeCheck())
+        {
+            lastChangeTime = (float)EditorApplication.timeSinceStartup;
+            needsPreviewUpdate = true;
+        }
+
+        serializedObject.ApplyModifiedProperties();
+
+        // Initial setup prompt for new users
+        if (isInitialSetup)
+        {
+            isInitialSetup = false;
+            if (EditorUtility.DisplayDialog("Level Generator Setup",
+                "Welcome to the Hybrid Level Generator!\n\nWould you like to enable the Quick Help Guide to get started?",
+                "Yes, Show Help", "No Thanks"))
+            {
+                quickHelpStep = 0;
+            }
+        }
+    }
+
+    private void DrawHeader()
+    {
+        EditorGUILayout.Space(5);
+
+        GUIStyle headerStyle = new GUIStyle(EditorStyles.boldLabel);
+        headerStyle.fontSize = 16;
+        headerStyle.alignment = TextAnchor.MiddleCenter;
+
+        EditorGUILayout.LabelField("HYBRID LEVEL GENERATOR", headerStyle, GUILayout.Height(30));
+
+        EditorGUILayout.Space(5);
+    }
+
+    private void DrawTabs()
+    {
+        EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+
+        for (int i = 0; i < tabNames.Length; i++)
+        {
+            bool isSelected = selectedTab == i;
+
+            // Use built-in styles for reliability
+            GUIStyle tabStyle = isSelected ? EditorStyles.toolbarButton : EditorStyles.toolbar;
+
+            if (GUILayout.Toggle(isSelected, tabNames[i], tabStyle))
+            {
+                if (!isSelected)
+                {
+                    selectedTab = i;
+                    // Reset quick help when changing tabs
+                    if (quickHelpStep >= 0)
+                    {
+                        quickHelpStep = i;
+                    }
+                }
+            }
+        }
+
+        EditorGUILayout.EndHorizontal();
+    }
+
+    private void DrawSetupTab()
+    {
+        EditorGUILayout.Space(5);
+
+        EditorGUILayout.LabelField("Generation Mode", EditorStyles.boldLabel);
+        EditorGUI.BeginChangeCheck();
+        EditorGUILayout.PropertyField(generationModeProp);
+
+        GenerationMode currentMode = (GenerationMode)generationModeProp.intValue;
+
+        // Help text
+        string helpText = "";
+        switch (currentMode)
+        {
+            case GenerationMode.FullyProcedural:
+                helpText = "BSP + Random Rect Rooms + MST Corridors.\nBest for: Roguelike dungeons with rectangular rooms";
+                break;
+            case GenerationMode.HybridProcedural:
+                helpText = "BSP + Templates/L-Shapes/Rects + MST Corridors.\nBest for: Varied levels with predefined room templates";
+                break;
+            case GenerationMode.UserDefinedLayout:
+                helpText = "Uses RoomNode components in the scene.\nBest for: Hand-crafted levels with procedural elements";
+                break;
+        }
+
+        EditorGUILayout.HelpBox(helpText, MessageType.Info);
+
+        // Open Designer Button (if User-Defined mode)
+        if (currentMode == GenerationMode.UserDefinedLayout)
+        {
+            EditorGUILayout.Space(5);
+            Color originalBgColor = GUI.backgroundColor;
+            GUI.backgroundColor = accentColor;
+            if (GUILayout.Button("Open Visual Level Designer", GUILayout.Height(30)))
+            {
+                VisualLevelDesignEditor.ShowWindow();
+            }
+            GUI.backgroundColor = originalBgColor;
+        }
+
+        EditorGUILayout.Space(10);
+
+        // Level Dimensions Section
+        EditorGUILayout.LabelField("Level Dimensions", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUILayout.Slider(levelWidthProp, 10, 100, new GUIContent("Width"));
+        EditorGUILayout.Slider(levelHeightProp, 10, 100, new GUIContent("Height"));
+
+        // Preview
+        Rect previewRect = EditorGUILayout.GetControlRect(false, 40);
+        Rect boxRect = new Rect(previewRect.x + 5, previewRect.y + 5, previewRect.width - 10, previewRect.height - 10);
+        EditorGUI.DrawRect(boxRect, accentColor);
+
+        GUIStyle centeredStyle = new GUIStyle(EditorStyles.label);
+        centeredStyle.alignment = TextAnchor.MiddleCenter;
+        centeredStyle.normal.textColor = Color.white;
+
+        GUI.Label(boxRect, $"{levelWidthProp.intValue} x {levelHeightProp.intValue}", centeredStyle);
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Randomness Section
+        EditorGUILayout.LabelField("Randomness", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUILayout.PropertyField(useRandomSeedProp);
+
+        if (!useRandomSeedProp.boolValue)
+        {
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PropertyField(seedProp, GUIContent.none);
+
+            if (GUILayout.Button("Random", EditorStyles.miniButton, GUILayout.Width(60)))
+            {
+                seedProp.intValue = UnityEngine.Random.Range(1, 9999);
+            }
+
+            EditorGUILayout.EndHorizontal();
+        }
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Auto-Preview Toggle
+        EditorGUILayout.BeginHorizontal();
+
+        autoPreviewEnabled = EditorGUILayout.ToggleLeft("Auto-Preview", autoPreviewEnabled, GUILayout.Width(100));
+
+        GUILayout.FlexibleSpace();
+
+        // Quick Help Button
+        Color originalBgColor = GUI.backgroundColor;
+        GUI.backgroundColor = quickHelpStep >= 0 ? generateColor : originalBgColor;
+        if (GUILayout.Button(quickHelpStep >= 0 ? "Disable Help" : "Enable Help", GUILayout.Width(100)))
+        {
+            quickHelpStep = quickHelpStep >= 0 ? -1 : 0;
+        }
+        GUI.backgroundColor = originalBgColor;
+
+        EditorGUILayout.EndHorizontal();
+    }
+
+    private void DrawRoomGenerationTab()
+    {
+        EditorGUILayout.Space(5);
+
+        GenerationMode currentMode = (GenerationMode)generationModeProp.intValue;
+
+        // BSP Settings
+        if (currentMode == GenerationMode.FullyProcedural || currentMode == GenerationMode.HybridProcedural)
+        {
+            EditorGUILayout.LabelField("BSP Algorithm Settings", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            EditorGUILayout.Slider(minRoomSizeProp, 3, 20, new GUIContent("Min Room Size"));
+            EditorGUILayout.IntSlider(maxIterationsProp, 1, 10, new GUIContent("Max Iterations"));
+            EditorGUILayout.Slider(roomPaddingProp, 0, 5, new GUIContent("Room Padding"));
+
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.Space(10);
+        }
+
+        // Hybrid Settings
+        if (currentMode == GenerationMode.HybridProcedural)
+        {
+            EditorGUILayout.LabelField("Room Type Distribution", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            EditorGUILayout.Slider(lShapeProbabilityProp, 0f, 1f, new GUIContent("L-Shape Probability"));
+            EditorGUILayout.Slider(roomTemplateProbabilityProp, 0f, 1f, new GUIContent("Template Probability"));
+
+            float rectProb = 1f - lShapeProbabilityProp.floatValue - roomTemplateProbabilityProp.floatValue;
+            if (rectProb < 0)
+            {
+                EditorGUILayout.HelpBox("Warning: Probabilities exceed 100%! Rectangle probability will be 0%.", MessageType.Warning);
+                rectProb = 0f;
+            }
+
+            EditorGUILayout.LabelField($"Rectangle Probability: {rectProb:P0}");
+
+            EditorGUILayout.Space(8);
+
+            EditorGUILayout.LabelField("L-Shape Settings", EditorStyles.boldLabel);
+            EditorGUILayout.Slider(minLLegRatioProp, 0.2f, 0.8f, new GUIContent("Min Leg Ratio"));
+
+            // Ensure max leg ratio is at least min leg ratio
+            maxLLegRatioProp.floatValue = Mathf.Max(maxLLegRatioProp.floatValue, minLLegRatioProp.floatValue);
+            EditorGUILayout.Slider(maxLLegRatioProp, minLLegRatioProp.floatValue, 0.8f, new GUIContent("Max Leg Ratio"));
+
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.Space(10);
+        }
+
+        // Corridor Settings
+        EditorGUILayout.LabelField("Corridor Settings", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUILayout.IntSlider(corridorWidthProp, 1, 5, new GUIContent("Corridor Width"));
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Template Prefabs (if in Hybrid mode)
+        if (currentMode == GenerationMode.HybridProcedural)
+        {
+            EditorGUILayout.LabelField("Room Templates", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            EditorGUILayout.HelpBox("Add prefabs that will be used as room templates. Templates should have a RoomTemplate component attached.", MessageType.Info);
+
+            EditorGUILayout.PropertyField(roomTemplatePrefabsProp, true);
+
+            EditorGUILayout.EndVertical();
+        }
+    }
+
+    private void DrawEntitiesTab()
+    {
+        EditorGUILayout.Space(5);
+
+        // Tilemap settings
+        EditorGUILayout.LabelField("Tilemap References", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUILayout.PropertyField(groundTilemapProp);
+        EditorGUILayout.PropertyField(wallTilemapProp);
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Tile references
+        EditorGUILayout.LabelField("Tile References", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUILayout.PropertyField(floorTileProp);
+        EditorGUILayout.PropertyField(wallTileProp);
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Player settings
+        EditorGUILayout.LabelField("Player Settings", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUILayout.PropertyField(playerPrefabProp);
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Enemy settings
+        EditorGUILayout.LabelField("Enemy Settings", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUILayout.PropertyField(enemyPrefabProp);
+        EditorGUILayout.IntSlider(enemiesPerRoomProp, 0, 10, new GUIContent("Enemies Per Room"));
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Decoration settings
+        EditorGUILayout.LabelField("Decoration Settings", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUILayout.PropertyField(decorationPrefabProp);
+        EditorGUILayout.IntSlider(decorationsPerRoomProp, 0, 15, new GUIContent("Decorations Per Room"));
+
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawPreviewTab()
+    {
+        EditorGUILayout.Space(5);
+
+        // Level preview area
+        EditorGUILayout.LabelField("Level Preview", EditorStyles.boldLabel);
+
+        // Check if we have a real render texture assigned
+        bool hasRenderTexture = levelPreviewTextureProp.objectReferenceValue != null;
+        bool hasPreviewCamera = levelPreviewCameraProp.objectReferenceValue != null;
+
+        if (hasRenderTexture && hasPreviewCamera)
+        {
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // Draw the render texture
+            RenderTexture renderTexture = levelPreviewTextureProp.objectReferenceValue as RenderTexture;
+
+            if (renderTexture != null)
+            {
+                Rect previewRect = GUILayoutUtility.GetRect(100, 300);
+                EditorGUI.DrawPreviewTexture(previewRect, renderTexture);
+            }
+
+            // Camera controls
+            EditorGUILayout.BeginHorizontal();
+
+            if (GUILayout.Button("Reset Camera", EditorStyles.miniButton))
+            {
+                Debug.Log("Camera Reset (Would implement in real scenario)");
+            }
+
+            if (GUILayout.Button("Top View", EditorStyles.miniButton))
+            {
+                Debug.Log("Camera Top View (Would implement in real scenario)");
+            }
+
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.EndVertical();
+        }
+        else
+        {
+            // Preview setup box
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            EditorGUILayout.HelpBox("For a better preview, set up a camera that renders to a Render Texture.", MessageType.Info);
+
+            EditorGUILayout.PropertyField(levelPreviewTextureProp);
+            EditorGUILayout.PropertyField(levelPreviewCameraProp);
+
+            EditorGUILayout.Space(5);
+            if (GUILayout.Button("Quick Setup Preview Camera"))
+            {
+                SetupPreviewCamera();
+            }
+
+            EditorGUILayout.EndVertical();
+        }
+
+        EditorGUILayout.Space(10);
+
+        // Statistics
+        EditorGUILayout.LabelField("Level Statistics", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        // Level info
+        int roomCount = UnityEngine.Random.Range(5, 12); // This would be calculated for real
+        int corridorCount = roomCount - 1;
+        int totalEnemies = roomCount * enemiesPerRoomProp.intValue;
+        int totalDecorations = roomCount * decorationsPerRoomProp.intValue;
+
+        EditorGUILayout.LabelField($"Level Size: {levelWidthProp.intValue} x {levelHeightProp.intValue} units");
+        EditorGUILayout.LabelField($"Estimated Room Count: {roomCount}");
+        EditorGUILayout.LabelField($"Estimated Corridor Count: {corridorCount}");
+        EditorGUILayout.LabelField($"Total Enemies: {totalEnemies}");
+        EditorGUILayout.LabelField($"Total Decorations: {totalDecorations}");
+
+        EditorGUILayout.EndVertical();
+    }
+
+    private void SetupPreviewCamera()
+    {
+        if (EditorUtility.DisplayDialog("Preview Camera Setup",
+            "This would create a new Render Texture asset and configure a camera in your scene for preview.",
+            "OK"))
+        {
+            Debug.Log("Preview camera would be set up here in a real implementation");
+        }
+    }
+
+    private void MarkSceneDirty(HybridLevelGenerator generator)
+    {
+        if (!Application.isPlaying && generator != null && generator.gameObject != null)
+        {
+            try
+            {
+                if (generator.gameObject.scene.IsValid())
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"Could not mark scene dirty: {e.Message}");
+            }
+        }
+    }
+} */
+
+
+
+
+
+
+
+using UnityEngine;
+using UnityEditor;
+using System.Collections.Generic;
+using System;
+
+// Note: Assumes GenerationMode enum is defined in a separate shared file.
+[CustomEditor(typeof(HybridLevelGenerator))]
+public class HybridLevelGeneratorEditor : Editor
+{
+    // --- Serialized Properties ---
+    SerializedProperty generationModeProp;
+    SerializedProperty levelWidthProp;
+    SerializedProperty levelHeightProp;
+    SerializedProperty minRoomSizeProp;
+    SerializedProperty maxIterationsProp;
+    SerializedProperty roomPaddingProp;
+    SerializedProperty lShapeProbabilityProp;
+    SerializedProperty minLLegRatioProp;
+    SerializedProperty maxLLegRatioProp;
+    SerializedProperty roomTemplatePrefabsProp;
+    SerializedProperty roomTemplateProbabilityProp;
+    SerializedProperty corridorWidthProp;
+    SerializedProperty groundTilemapProp;
+    SerializedProperty wallTilemapProp;
+    SerializedProperty floorTileProp;
+    SerializedProperty wallTileProp;
+    SerializedProperty seedProp;
+    SerializedProperty useRandomSeedProp;
+    SerializedProperty playerPrefabProp;
+    SerializedProperty enemyPrefabProp;
+    SerializedProperty decorationPrefabProp;
+    SerializedProperty enemiesPerRoomProp;
+    SerializedProperty decorationsPerRoomProp;
+
+    // --- UI States ---
+    private int selectedTab = 0;
+    private string[] tabNames = new string[] { "Level Setup", "Room Generation", "Entities" };
+    private bool isInitialSetup = true;
+    private float lastPreviewTime;
+    private bool showFeedback = false;
+    private string feedbackMessage = "";
+    private MessageType feedbackType = MessageType.Info;
+    private float feedbackDuration = 3f;
+
+    // --- Colors ---
+    private readonly Color headerColor = new Color(0.22f, 0.51f, 0.89f);
+    private readonly Color accentColor = new Color(0.3f, 0.6f, 1f);
+    private readonly Color generateColor = new Color(0.15f, 0.75f, 0.5f);
+    private readonly Color clearColor = new Color(0.85f, 0.25f, 0.25f);
+
+    // --- Quick-help feature ---
+    private int quickHelpStep = -1;
+    private string[] quickHelpMessages = new string[] {
+        "Start by selecting a Generation Mode. Fully Procedural uses pure BSP, while Hybrid allows for template rooms.",
+        "Configure your Level Dimensions to set the overall size of your generated level.",
+        "Adjust BSP Settings to control how the level is initially partitioned.",
+        "Make your levels unique with L-shaped rooms and Room Templates.",
+        "Add Players, Enemies, and Decorations to bring your level to life!"
+    };
+
+    private void OnEnable()
+    {
+        // Find properties
+        generationModeProp = serializedObject.FindProperty("generationMode");
+        levelWidthProp = serializedObject.FindProperty("levelWidth");
+        levelHeightProp = serializedObject.FindProperty("levelHeight");
+        minRoomSizeProp = serializedObject.FindProperty("minRoomSize");
+        maxIterationsProp = serializedObject.FindProperty("maxIterations");
+        roomPaddingProp = serializedObject.FindProperty("roomPadding");
+        lShapeProbabilityProp = serializedObject.FindProperty("lShapeProbability");
+        minLLegRatioProp = serializedObject.FindProperty("minLLegRatio");
+        maxLLegRatioProp = serializedObject.FindProperty("maxLLegRatio");
+        roomTemplatePrefabsProp = serializedObject.FindProperty("roomTemplatePrefabs");
+        roomTemplateProbabilityProp = serializedObject.FindProperty("roomTemplateProbability");
+        corridorWidthProp = serializedObject.FindProperty("corridorWidth");
+        groundTilemapProp = serializedObject.FindProperty("groundTilemap");
+        wallTilemapProp = serializedObject.FindProperty("wallTilemap");
+        floorTileProp = serializedObject.FindProperty("floorTile");
+        wallTileProp = serializedObject.FindProperty("wallTile");
+        seedProp = serializedObject.FindProperty("seed");
+        useRandomSeedProp = serializedObject.FindProperty("useRandomSeed");
+        playerPrefabProp = serializedObject.FindProperty("playerPrefab");
+        enemyPrefabProp = serializedObject.FindProperty("enemyPrefab");
+        decorationPrefabProp = serializedObject.FindProperty("decorationPrefab");
+        enemiesPerRoomProp = serializedObject.FindProperty("enemiesPerRoom");
+        decorationsPerRoomProp = serializedObject.FindProperty("decorationsPerRoom");
+
+        // Register for editor updates for feedback timing
+        EditorApplication.update += OnEditorUpdate;
+    }
+
+    private void OnDisable()
+    {
+        // Unregister from editor updates
+        EditorApplication.update -= OnEditorUpdate;
+    }
+
+    private void OnEditorUpdate()
+    {
+        // Handle timed feedback messages
+        if (showFeedback && EditorApplication.timeSinceStartup - lastPreviewTime > feedbackDuration)
+        {
+            showFeedback = false;
+            Repaint();
+        }
+    }
+
+    // Show feedback message for a set duration
+    private void ShowFeedback(string message, MessageType type = MessageType.Info, float duration = 3f)
+    {
+        feedbackMessage = message;
+        feedbackType = type;
+        showFeedback = true;
+        lastPreviewTime = (float)EditorApplication.timeSinceStartup;
+        feedbackDuration = duration;
+        Repaint();
+    }
+
+    public override void OnInspectorGUI()
+    {
+        serializedObject.Update();
+
+        // Cache the background color
+        Color cachedBgColor = GUI.backgroundColor;
+
+        // Check for changes to update preview
+        EditorGUI.BeginChangeCheck();
+
+        // Draw stylish header
+        DrawHeader();
+
+        // Draw tabs
+        DrawTabs();
+
+        // Draw tab content
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+        switch (selectedTab)
+        {
+            case 0: // Level Setup Tab
+                DrawLevelSetupTab();
+                break;
+            case 1: // Room Generation Tab
+                DrawRoomGenerationTab();
+                break;
+            case 2: // Entities Tab
+                DrawEntitiesTab();
+                break;
+        }
+        EditorGUILayout.EndVertical();
+
+        // Show feedback message if active
+        if (showFeedback)
+        {
+            EditorGUILayout.Space(5);
+            EditorGUILayout.HelpBox(feedbackMessage, feedbackType);
+        }
+
+        // Bottom action controls - always visible
+        EditorGUILayout.Space(10);
+        EditorGUILayout.BeginHorizontal();
+
+        // Generate Button
+        GUI.backgroundColor = generateColor;
+        if (GUILayout.Button("Generate Level", GUILayout.Height(40)))
+        {
+            HybridLevelGenerator generator = (HybridLevelGenerator)target;
+            Undo.RecordObject(generator, "Generate Level");
+            generator.GenerateLevel();
+            MarkSceneDirty(generator);
+
+            // Show feedback
+            ShowFeedback("Level Generated Successfully!", MessageType.Info);
+        }
+
+        // Clear Button
+        GUI.backgroundColor = clearColor;
+        if (GUILayout.Button("Clear Level", GUILayout.Height(40)))
+        {
+            HybridLevelGenerator generator = (HybridLevelGenerator)target;
+            if (EditorUtility.DisplayDialog("Confirm Clear",
+                "Clear generated level AND scene design nodes?",
+                "Clear All", "Cancel"))
+            {
+                Undo.RecordObject(generator, "Clear Level");
+                generator.ClearLevel();
+                MarkSceneDirty(generator);
+
+                // Show feedback
+                ShowFeedback("Level Cleared", MessageType.Info);
+            }
+        }
+
+        GUI.backgroundColor = cachedBgColor;
+        EditorGUILayout.EndHorizontal();
+
+        // Show Quick-Help if enabled
+        if (quickHelpStep >= 0 && quickHelpStep < quickHelpMessages.Length)
+        {
+            EditorGUILayout.Space(10);
+            EditorGUILayout.HelpBox($"TIP {quickHelpStep + 1}/{quickHelpMessages.Length}: {quickHelpMessages[quickHelpStep]}",
+                MessageType.Info);
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button(quickHelpStep < quickHelpMessages.Length - 1 ? "Next Tip" : "Close Help",
+                GUILayout.Width(100)))
+            {
+                quickHelpStep++;
+                if (quickHelpStep >= quickHelpMessages.Length)
+                {
+                    quickHelpStep = -1;
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+        }
+
+        // Check if any property was modified
+        if (EditorGUI.EndChangeCheck())
+        {
+            // Give feedback about changes
+            ShowFeedback("Settings updated", MessageType.Info, 1.5f);
+        }
+
+        serializedObject.ApplyModifiedProperties();
+
+        // Initial setup prompt for new users
+        if (isInitialSetup)
+        {
+            isInitialSetup = false;
+            if (EditorUtility.DisplayDialog("Level Generator Setup",
+                "Welcome to the Hybrid Level Generator!\n\nWould you like to enable the Quick Help Guide to get started?",
+                "Yes, Show Help", "No Thanks"))
+            {
+                quickHelpStep = 0;
+            }
+        }
+    }
+
+    private void DrawHeader()
+    {
+        EditorGUILayout.Space(5);
+
+        GUIStyle headerStyle = new GUIStyle(EditorStyles.boldLabel);
+        headerStyle.fontSize = 16;
+        headerStyle.alignment = TextAnchor.MiddleCenter;
+
+        Rect headerRect = GUILayoutUtility.GetRect(GUIContent.none, headerStyle, GUILayout.Height(30));
+        EditorGUI.DrawRect(headerRect, headerColor);
+
+        // Adjust text color for better contrast
+        headerStyle.normal.textColor = Color.white;
+        GUI.Label(headerRect, "HYBRID LEVEL GENERATOR", headerStyle);
+
+        EditorGUILayout.Space(5);
+    }
+
+    private void DrawTabs()
+    {
+        EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
+
+        for (int i = 0; i < tabNames.Length; i++)
+        {
+            bool isSelected = selectedTab == i;
+
+            // Use built-in styles for reliability
+            GUIStyle tabStyle = isSelected ? EditorStyles.toolbarButton : EditorStyles.toolbar;
+
+            if (GUILayout.Toggle(isSelected, tabNames[i], tabStyle))
+            {
+                if (!isSelected)
+                {
+                    selectedTab = i;
+                    // Reset quick help when changing tabs
+                    if (quickHelpStep >= 0)
+                    {
+                        quickHelpStep = i;
+                    }
+                }
+            }
+        }
+
+        GUILayout.FlexibleSpace();
+
+        // Quick Help Button on toolbar
+        Color cachedBgColor = GUI.backgroundColor;
+        GUI.backgroundColor = quickHelpStep >= 0 ? accentColor : cachedBgColor;
+        if (GUILayout.Button(quickHelpStep >= 0 ? "❓" : "❓", EditorStyles.toolbarButton, GUILayout.Width(25)))
+        {
+            quickHelpStep = quickHelpStep >= 0 ? -1 : 0;
+        }
+        GUI.backgroundColor = cachedBgColor;
+
+        EditorGUILayout.EndHorizontal();
+    }
+
+    private void DrawLevelSetupTab()
+    {
+        EditorGUILayout.Space(5);
+
+        EditorGUILayout.LabelField("Generation Mode", EditorStyles.boldLabel);
+        EditorGUI.BeginChangeCheck();
+        EditorGUILayout.PropertyField(generationModeProp);
+
+        GenerationMode currentMode = (GenerationMode)generationModeProp.intValue;
+
+        // Help text
+        string helpText = "";
+        switch (currentMode)
+        {
+            case GenerationMode.FullyProcedural:
+                helpText = "BSP + Random Rect Rooms + MST Corridors.\nBest for: Roguelike dungeons with rectangular rooms";
+                break;
+            case GenerationMode.HybridProcedural:
+                helpText = "BSP + Templates/L-Shapes/Rects + MST Corridors.\nBest for: Varied levels with predefined room templates";
+                break;
+            case GenerationMode.UserDefinedLayout:
+                helpText = "Uses RoomNode components in the scene.\nBest for: Hand-crafted levels with procedural elements";
+                break;
+        }
+
+        EditorGUILayout.HelpBox(helpText, MessageType.Info);
+
+        // Open Designer Button (if User-Defined mode)
+        if (currentMode == GenerationMode.UserDefinedLayout)
+        {
+            EditorGUILayout.Space(5);
+            Color cachedBgColor = GUI.backgroundColor;
+            GUI.backgroundColor = accentColor;
+            if (GUILayout.Button("Open Visual Level Designer", GUILayout.Height(30)))
+            {
+                VisualLevelDesignEditor.ShowWindow();
+                ShowFeedback("Visual Level Designer opened", MessageType.Info);
+            }
+            GUI.backgroundColor = cachedBgColor;
+        }
+
+        EditorGUILayout.Space(10);
+
+        // Level Dimensions Section
+        EditorGUILayout.LabelField("Level Dimensions", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        // Level size field with visual slider
+        EditorGUI.BeginChangeCheck();
+
+        // Width slider with better visual feedback
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.PrefixLabel("Width");
+        EditorGUILayout.BeginVertical();
+        levelWidthProp.intValue = EditorGUILayout.IntSlider(levelWidthProp.intValue, 10, 100);
+
+        // Draw a visual representation of width
+        Rect widthRect = EditorGUILayout.GetControlRect(false, 10);
+        float widthPercentage = (levelWidthProp.intValue - 10f) / 90f; // 10 to 100 range
+        Rect filledRect = new Rect(widthRect.x, widthRect.y, widthRect.width * widthPercentage, widthRect.height);
+        EditorGUI.DrawRect(widthRect, new Color(0.3f, 0.3f, 0.3f));
+        EditorGUI.DrawRect(filledRect, accentColor);
+        EditorGUILayout.EndVertical();
+        EditorGUILayout.EndHorizontal();
+
+        // Height slider with visual feedback
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.PrefixLabel("Height");
+        EditorGUILayout.BeginVertical();
+        levelHeightProp.intValue = EditorGUILayout.IntSlider(levelHeightProp.intValue, 10, 100);
+
+        // Draw a visual representation of height
+        Rect heightRect = EditorGUILayout.GetControlRect(false, 10);
+        float heightPercentage = (levelHeightProp.intValue - 10f) / 90f; // 10 to 100 range
+        Rect filledHeightRect = new Rect(heightRect.x, heightRect.y, heightRect.width * heightPercentage, heightRect.height);
+        EditorGUI.DrawRect(heightRect, new Color(0.3f, 0.3f, 0.3f));
+        EditorGUI.DrawRect(filledHeightRect, accentColor);
+        EditorGUILayout.EndVertical();
+        EditorGUILayout.EndHorizontal();
+
+        // Preview area showing relative dimensions
+        float aspectRatio = (float)levelWidthProp.intValue / levelHeightProp.intValue;
+        float previewHeight = 60; // Fixed height
+        float previewWidth = previewHeight * aspectRatio;
+
+        // Center the preview
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.FlexibleSpace();
+        Rect previewRect = GUILayoutUtility.GetRect(previewWidth, previewHeight);
+        EditorGUI.DrawRect(previewRect, accentColor);
+        GUI.Label(previewRect, $"{levelWidthProp.intValue} x {levelHeightProp.intValue}",
+            new GUIStyle(EditorStyles.boldLabel)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                normal = { textColor = Color.white }
+            });
+        GUILayout.FlexibleSpace();
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Randomness Section
+        EditorGUILayout.LabelField("Randomness", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        // Use a more intuitive toggle with explanation
+        bool useRandom = EditorGUILayout.Toggle("Use Random Seed", useRandomSeedProp.boolValue);
+        if (useRandom != useRandomSeedProp.boolValue)
+        {
+            useRandomSeedProp.boolValue = useRandom;
+            if (useRandom)
+            {
+                ShowFeedback("Using a random seed each time", MessageType.Info);
+            }
+            else
+            {
+                ShowFeedback("Using fixed seed value", MessageType.Info);
+            }
+        }
+
+        if (!useRandomSeedProp.boolValue)
+        {
+            EditorGUILayout.BeginHorizontal();
+
+            int oldSeed = seedProp.intValue;
+            EditorGUILayout.PropertyField(seedProp, new GUIContent("Seed Value"));
+
+            // Button to randomize seed
+            if (GUILayout.Button("Randomize", EditorStyles.miniButton, GUILayout.Width(70)))
+            {
+                seedProp.intValue = UnityEngine.Random.Range(1, 9999);
+                ShowFeedback($"New seed: {seedProp.intValue}", MessageType.Info);
+            }
+
+            EditorGUILayout.EndHorizontal();
+
+            // Show visual feedback of seed change
+            if (oldSeed != seedProp.intValue && Event.current.type == EventType.Used)
+            {
+                ShowFeedback($"Seed changed to: {seedProp.intValue}", MessageType.Info);
+            }
+        }
+        else
+        {
+            EditorGUILayout.HelpBox("A new random seed will be generated each time.", MessageType.Info);
+        }
+
+        EditorGUILayout.EndVertical();
+    }
+
+    private void DrawRoomGenerationTab()
+    {
+        EditorGUILayout.Space(5);
+
+        GenerationMode currentMode = (GenerationMode)generationModeProp.intValue;
+
+        // BSP Settings
+        if (currentMode == GenerationMode.FullyProcedural || currentMode == GenerationMode.HybridProcedural)
+        {
+            EditorGUILayout.LabelField("BSP Algorithm Settings", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // Min Room Size with visual slider
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel("Min Room Size");
+            EditorGUILayout.BeginVertical();
+            minRoomSizeProp.intValue = EditorGUILayout.IntSlider(minRoomSizeProp.intValue, 3, 20);
+
+            // Draw a visual representation
+            Rect sizeRect = EditorGUILayout.GetControlRect(false, 10);
+            float sizePercentage = (minRoomSizeProp.intValue - 3f) / 17f; // 3 to 20 range
+            Rect filledRect = new Rect(sizeRect.x, sizeRect.y, sizeRect.width * sizePercentage, sizeRect.height);
+            EditorGUI.DrawRect(sizeRect, new Color(0.3f, 0.3f, 0.3f));
+            EditorGUI.DrawRect(filledRect, accentColor);
+            EditorGUILayout.EndVertical();
+            EditorGUILayout.EndHorizontal();
+
+            // BSP Iterations with visual effect
+            EditorGUILayout.BeginHorizontal();
+            EditorGUILayout.PrefixLabel("BSP Iterations");
+            EditorGUILayout.BeginVertical();
+            int oldValue = maxIterationsProp.intValue;
+            maxIterationsProp.intValue = EditorGUILayout.IntSlider(maxIterationsProp.intValue, 1, 10);
+
+            // Draw visualization of BSP iterations
+            Rect iterationBar = EditorGUILayout.GetControlRect(false, 20);
+            int iterations = maxIterationsProp.intValue;
+            float segmentWidth = iterationBar.width / 10f;
+
+            // Draw segments
+            for (int i = 0; i < 10; i++)
+            {
+                Rect segment = new Rect(iterationBar.x + (i * segmentWidth), iterationBar.y, segmentWidth - 2, iterationBar.height);
+
+                // Active segments
+                if (i < iterations)
+                {
+                    EditorGUI.DrawRect(segment, accentColor);
+                }
+                // Inactive segments
+                else
+                {
+                    EditorGUI.DrawRect(segment, new Color(0.3f, 0.3f, 0.3f));
+                }
+            }
+
+            // Give visual feedback when iterations change
+            if (oldValue != maxIterationsProp.intValue && Event.current.type == EventType.Used)
+            {
+                if (maxIterationsProp.intValue > oldValue)
+                {
+                    ShowFeedback("More iterations = smaller, more numerous rooms", MessageType.Info);
+                }
+                else
+                {
+                    ShowFeedback("Fewer iterations = larger, fewer rooms", MessageType.Info);
+                }
+            }
+
+            EditorGUILayout.EndVertical();
+            EditorGUILayout.EndHorizontal();
+
+            // Room Padding with visual slider
+            EditorGUILayout.Slider(roomPaddingProp, 0, 5, new GUIContent("Room Padding"));
+
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.Space(10);
+        }
+
+        // Hybrid Settings
+        if (currentMode == GenerationMode.HybridProcedural)
+        {
+            EditorGUILayout.LabelField("Room Type Distribution", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // Room type probabilities with visual distribution
+            float lProb = lShapeProbabilityProp.floatValue;
+            float templateProb = roomTemplateProbabilityProp.floatValue;
+            float rectProb = 1f - lProb - templateProb;
+
+            EditorGUILayout.Slider(lShapeProbabilityProp, 0f, 1f, new GUIContent("L-Shape Probability"));
+            EditorGUILayout.Slider(roomTemplateProbabilityProp, 0f, 1f, new GUIContent("Template Probability"));
+
+            // Recalculate after potential changes
+            lProb = lShapeProbabilityProp.floatValue;
+            templateProb = roomTemplateProbabilityProp.floatValue;
+            rectProb = 1f - lProb - templateProb;
+
+            // Warning if probabilities exceed 100%
+            if (rectProb < 0)
+            {
+                EditorGUILayout.HelpBox("Warning: Probabilities exceed 100%! Rectangle probability will be 0%.", MessageType.Warning);
+                rectProb = 0f;
+            }
+
+            // Visual distribution bar
+            Rect distributionRect = EditorGUILayout.GetControlRect(false, 25);
+            float totalWidth = distributionRect.width;
+
+            // Calculate widths
+            float lWidth = totalWidth * lProb;
+            float templateWidth = totalWidth * templateProb;
+            float rectWidth = totalWidth * rectProb;
+
+            // Draw distribution segments
+            Rect lRect = new Rect(distributionRect.x, distributionRect.y, lWidth, distributionRect.height);
+            Rect templateRect = new Rect(distributionRect.x + lWidth, distributionRect.y, templateWidth, distributionRect.height);
+            Rect rectRect = new Rect(distributionRect.x + lWidth + templateWidth, distributionRect.y, rectWidth, distributionRect.height);
+
+            EditorGUI.DrawRect(lRect, new Color(0.9f, 0.6f, 0.3f));
+            EditorGUI.DrawRect(templateRect, new Color(0.3f, 0.6f, 0.9f));
+            EditorGUI.DrawRect(rectRect, new Color(0.6f, 0.4f, 0.8f));
+
+            // Labels
+            EditorGUILayout.BeginHorizontal();
+            GUIStyle smallLabel = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.MiddleCenter };
+
+            if (lProb > 0.1f)
+                GUILayout.Label("L-Shapes", smallLabel, GUILayout.Width(lWidth));
+            if (templateProb > 0.1f)
+                GUILayout.Label("Templates", smallLabel, GUILayout.Width(templateWidth));
+            if (rectProb > 0.1f)
+                GUILayout.Label("Rectangles", smallLabel, GUILayout.Width(rectWidth));
+
+            EditorGUILayout.EndHorizontal();
+
+            EditorGUILayout.Space(8);
+
+            // L-Shape Settings
+            EditorGUILayout.LabelField("L-Shape Settings", EditorStyles.boldLabel);
+
+            // Min Leg Ratio with visual representation
+            EditorGUILayout.Slider(minLLegRatioProp, 0.2f, 0.8f, new GUIContent("Min Leg Ratio"));
+
+            // Ensure max leg ratio is at least min leg ratio
+            maxLLegRatioProp.floatValue = Mathf.Max(maxLLegRatioProp.floatValue, minLLegRatioProp.floatValue);
+            EditorGUILayout.Slider(maxLLegRatioProp, minLLegRatioProp.floatValue, 0.8f, new GUIContent("Max Leg Ratio"));
+
+            // L-shape visualization
+            float legRatio = (minLLegRatioProp.floatValue + maxLLegRatioProp.floatValue) / 2f;
+            EditorGUILayout.Space(5);
+
+            Rect lShapeRect = EditorGUILayout.GetControlRect(false, 80);
+            float size = Mathf.Min(lShapeRect.width, lShapeRect.height) * 0.8f;
+            float padding = 10;
+            float centerX = lShapeRect.x + (lShapeRect.width - size) / 2;
+            float centerY = lShapeRect.y + (lShapeRect.height - size) / 2;
+
+            // Vertical leg width & height
+            float vertLegWidth = size * legRatio;
+            float vertLegHeight = size;
+
+            // Horizontal leg width & height
+            float horizLegWidth = size;
+            float horizLegHeight = size * legRatio;
+
+            // Draw L-shape
+            Rect vertLeg = new Rect(
+                centerX,
+                centerY,
+                vertLegWidth,
+                vertLegHeight
+            );
+
+            Rect horizLeg = new Rect(
+                centerX,
+                centerY + (vertLegHeight - horizLegHeight),
+                horizLegWidth,
+                horizLegHeight
+            );
+
+            EditorGUI.DrawRect(vertLeg, accentColor);
+            EditorGUI.DrawRect(horizLeg, accentColor);
+
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.Space(10);
+        }
+
+        // Corridor Settings
+        EditorGUILayout.LabelField("Corridor Settings", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUI.BeginChangeCheck();
+        int oldCorridorWidth = corridorWidthProp.intValue;
+        EditorGUILayout.IntSlider(corridorWidthProp, 1, 5, new GUIContent("Corridor Width"));
+
+        // Visual corridor width preview
+        Rect corridorPreviewArea = EditorGUILayout.GetControlRect(false, 40);
+        float corridorPreviewWidth = corridorPreviewArea.width - 20;
+
+        Rect corridorVisual = new Rect(
+            corridorPreviewArea.x + 10,
+            corridorPreviewArea.y + (corridorPreviewArea.height - corridorWidthProp.intValue * 5) / 2,
+            corridorPreviewWidth,
+            corridorWidthProp.intValue * 5  // Scale for visibility
+        );
+
+        EditorGUI.DrawRect(corridorVisual, accentColor);
+
+        if (EditorGUI.EndChangeCheck() && oldCorridorWidth != corridorWidthProp.intValue)
+        {
+            ShowFeedback($"Corridor width set to {corridorWidthProp.intValue}", MessageType.Info);
+        }
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Template Prefabs (if in Hybrid mode)
+        if (currentMode == GenerationMode.HybridProcedural)
+        {
+            EditorGUILayout.LabelField("Room Templates", EditorStyles.boldLabel);
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            EditorGUILayout.HelpBox("Add prefabs that will be used as room templates. Templates should have a RoomTemplate component attached.", MessageType.Info);
+
+            EditorGUI.BeginChangeCheck();
+            EditorGUILayout.PropertyField(roomTemplatePrefabsProp, true);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                ShowFeedback("Room templates updated", MessageType.Info);
+            }
+
+            EditorGUILayout.EndVertical();
+        }
+    }
+
+    private void DrawEntitiesTab()
+    {
+        EditorGUILayout.Space(5);
+
+        // Tilemap settings
+        EditorGUILayout.LabelField("Tilemap References", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUI.BeginChangeCheck();
+
+        // Ground tilemap with icon
+        // Ground tilemap with icon
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label(EditorGUIUtility.IconContent("Tilemap Icon"), GUILayout.Width(20), GUILayout.Height(20));
+        EditorGUILayout.PropertyField(groundTilemapProp, new GUIContent("Ground Tilemap"));
+        EditorGUILayout.EndHorizontal();
+
+        // Wall tilemap with icon
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label(EditorGUIUtility.IconContent("Tilemap Icon"), GUILayout.Width(20), GUILayout.Height(20));
+        EditorGUILayout.PropertyField(wallTilemapProp, new GUIContent("Wall Tilemap"));
+        EditorGUILayout.EndHorizontal();
+
+        if (EditorGUI.EndChangeCheck())
+        {
+            ShowFeedback("Tilemap references updated", MessageType.Info);
+        }
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Tile references
+        EditorGUILayout.LabelField("Tile References", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUI.BeginChangeCheck();
+
+        // Floor tile with color preview
+        EditorGUILayout.BeginHorizontal();
+        Rect floorColorRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight, GUILayout.Width(20));
+        EditorGUI.DrawRect(floorColorRect, new Color(0.2f, 0.8f, 0.3f));
+        EditorGUILayout.PropertyField(floorTileProp, new GUIContent("Floor Tile"));
+        EditorGUILayout.EndHorizontal();
+
+        // Wall tile with color preview
+        EditorGUILayout.BeginHorizontal();
+        Rect wallColorRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight, GUILayout.Width(20));
+        EditorGUI.DrawRect(wallColorRect, new Color(0.8f, 0.4f, 0.3f));
+        EditorGUILayout.PropertyField(wallTileProp, new GUIContent("Wall Tile"));
+        EditorGUILayout.EndHorizontal();
+
+        if (EditorGUI.EndChangeCheck())
+        {
+            ShowFeedback("Tile references updated", MessageType.Info);
+        }
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Player settings
+        EditorGUILayout.LabelField("Player Settings", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUI.BeginChangeCheck();
+
+        // Player prefab with icon
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label(EditorGUIUtility.IconContent("d_AnimatorController Icon"), GUILayout.Width(20), GUILayout.Height(20));
+        EditorGUILayout.PropertyField(playerPrefabProp, new GUIContent("Player Prefab"));
+        EditorGUILayout.EndHorizontal();
+
+        if (EditorGUI.EndChangeCheck())
+        {
+            if (playerPrefabProp.objectReferenceValue != null)
+            {
+                ShowFeedback("Player prefab set", MessageType.Info);
+            }
+            else
+            {
+                ShowFeedback("Player prefab removed", MessageType.Warning);
+            }
+        }
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Enemy settings
+        EditorGUILayout.LabelField("Enemy Settings", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUI.BeginChangeCheck();
+
+        // Enemy prefab with icon
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label(EditorGUIUtility.IconContent("d_PreMatCube"), GUILayout.Width(20), GUILayout.Height(20));
+        EditorGUILayout.PropertyField(enemyPrefabProp, new GUIContent("Enemy Prefab"));
+        EditorGUILayout.EndHorizontal();
+
+        // Enemy count per room with visual feedback
+        int oldEnemyCount = enemiesPerRoomProp.intValue;
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.PrefixLabel("Enemies Per Room");
+        enemiesPerRoomProp.intValue = EditorGUILayout.IntSlider(enemiesPerRoomProp.intValue, 0, 10);
+        EditorGUILayout.EndHorizontal();
+
+        // Visual enemy count indicator
+        if (enemyPrefabProp.objectReferenceValue != null && enemiesPerRoomProp.intValue > 0)
+        {
+            Rect enemyVisRect = EditorGUILayout.GetControlRect(false, 30);
+            float iconWidth = 15f;
+            float spacing = 5f;
+            float totalWidth = enemiesPerRoomProp.intValue * (iconWidth + spacing);
+            float startX = enemyVisRect.x + (enemyVisRect.width - totalWidth) / 2;
+
+            for (int i = 0; i < enemiesPerRoomProp.intValue; i++)
+            {
+                Rect enemyRect = new Rect(
+                    startX + (i * (iconWidth + spacing)),
+                    enemyVisRect.y + (enemyVisRect.height - iconWidth) / 2,
+                    iconWidth,
+                    iconWidth
+                );
+
+                EditorGUI.DrawRect(enemyRect, new Color(0.85f, 0.3f, 0.3f));
+            }
+        }
+
+        if (EditorGUI.EndChangeCheck())
+        {
+            if (enemiesPerRoomProp.intValue != oldEnemyCount)
+            {
+                ShowFeedback($"Enemy count set to {enemiesPerRoomProp.intValue} per room", MessageType.Info);
+            }
+        }
+
+        EditorGUILayout.EndVertical();
+
+        EditorGUILayout.Space(10);
+
+        // Decoration settings
+        EditorGUILayout.LabelField("Decoration Settings", EditorStyles.boldLabel);
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+        EditorGUI.BeginChangeCheck();
+
+        // Decoration prefab with icon
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label(EditorGUIUtility.IconContent("d_TerrainInspector.TerrainToolSplat"), GUILayout.Width(20), GUILayout.Height(20));
+        EditorGUILayout.PropertyField(decorationPrefabProp, new GUIContent("Decoration Prefab"));
+        EditorGUILayout.EndHorizontal();
+
+        // Decoration count per room with visual feedback
+        int oldDecorCount = decorationsPerRoomProp.intValue;
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.PrefixLabel("Decorations Per Room");
+        decorationsPerRoomProp.intValue = EditorGUILayout.IntSlider(decorationsPerRoomProp.intValue, 0, 15);
+        EditorGUILayout.EndHorizontal();
+
+        // Visual decoration count indicator
+        if (decorationPrefabProp.objectReferenceValue != null && decorationsPerRoomProp.intValue > 0)
+        {
+            Rect decorVisRect = EditorGUILayout.GetControlRect(false, 30);
+            float iconWidth = 12f;
+            float spacing = 4f;
+            float totalWidth = decorationsPerRoomProp.intValue * (iconWidth + spacing);
+            float startX = decorVisRect.x + (decorVisRect.width - totalWidth) / 2;
+
+            for (int i = 0; i < decorationsPerRoomProp.intValue; i++)
+            {
+                Rect decorRect = new Rect(
+                    startX + (i * (iconWidth + spacing)),
+                    decorVisRect.y + (decorVisRect.height - iconWidth) / 2,
+                    iconWidth,
+                    iconWidth
+                );
+
+                // Alternate decoration colors
+                Color decorColor = (i % 3 == 0) ?
+                    new Color(0.3f, 0.7f, 0.3f) :
+                    (i % 3 == 1) ?
+                        new Color(0.3f, 0.6f, 0.8f) :
+                        new Color(0.8f, 0.7f, 0.3f);
+
+                EditorGUI.DrawRect(decorRect, decorColor);
+            }
+        }
+
+        if (EditorGUI.EndChangeCheck())
+        {
+            if (decorationsPerRoomProp.intValue != oldDecorCount)
+            {
+                ShowFeedback($"Decoration count set to {decorationsPerRoomProp.intValue} per room", MessageType.Info);
+            }
+        }
+
+        EditorGUILayout.EndVertical();
+    }
+
+    private void MarkSceneDirty(HybridLevelGenerator generator)
+    {
+        if (!Application.isPlaying && generator != null && generator.gameObject != null)
+        {
+            try
+            {
+                if (generator.gameObject.scene.IsValid())
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"Could not mark scene dirty: {e.Message}");
+            }
+        }
+    }
 }
