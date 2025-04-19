@@ -1267,11 +1267,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   generationMode: 2
-  levelWidth: 100
-  levelHeight: 100
-  minRoomSize: 9
-  maxIterations: 4
-  roomPadding: 2.02
+  levelWidth: 79
+  levelHeight: 74
+  minRoomSize: 10
+  maxIterations: 6
+  roomPadding: 2.37
   lShapeProbability: 0.353
   minLLegRatio: 0.435
   maxLLegRatio: 0.537
@@ -1281,20 +1281,18 @@ MonoBehaviour:
   - {fileID: 5414685687059046652, guid: 242867fe6a381ae42a9ff1bd47ac71ec, type: 3}
   - {fileID: 6718998220024841746, guid: e4808451890a5b94daf38c184dfaf3b4, type: 3}
   roomTemplateProbability: 0.487
-  corridorWidth: 3
+  corridorWidth: 2
   groundTilemap: {fileID: 59786515}
   wallTilemap: {fileID: 1521400880}
   floorTile: {fileID: 11400000, guid: 3f5b5b050a99feb4e98a954f647d17e6, type: 2}
   wallTile: {fileID: 11400000, guid: fd1a932b63d942046be33904a6e02fc0, type: 2}
-  seed: 679241250
+  seed: 782917078
   useRandomSeed: 1
   playerPrefab: {fileID: 3548798236488958899, guid: 233e123314ae4e948bcc465afc76dfb9, type: 3}
   enemyPrefab: {fileID: 7773039407867173279, guid: a722c0378e102014a9dfbe64ebc335bf, type: 3}
   decorationPrefab: {fileID: 5577925952059883224, guid: 02eddd388e6544a4bb5a808e7b0ee2e2, type: 3}
   enemiesPerRoom: 2
   decorationsPerRoom: 3
-  levelPreviewTexture: {fileID: 8400000, guid: ad6b8f7f32431904899cba4c38769122, type: 2}
-  levelPreviewCamera: {fileID: 0}
 --- !u!4 &1579120278
 Transform:
   m_ObjectHideFlags: 0

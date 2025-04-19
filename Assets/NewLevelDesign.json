@@ -2,101 +2,53 @@
     "nodes": [
         {
             "id": "NewRoom_1",
-            "displayName": "New Room",
+            "displayName": "New Room_1",
             "nodeType": 0,
-            "x": -30.0,
+            "x": -20.0,
             "y": -20.0,
             "logicalWidth": 10,
             "logicalHeight": 10,
             "templateName": "",
-            "visualWidth": 24.799999237060548,
-            "visualHeight": 20.0
+            "visualWidth": 30.0,
+            "visualHeight": 30.0
         },
         {
             "id": "NewRoom_2",
-            "displayName": "New Room",
+            "displayName": "New Room_2",
             "nodeType": 0,
             "x": 20.0,
             "y": -20.0,
             "logicalWidth": 10,
             "logicalHeight": 10,
             "templateName": "",
-            "visualWidth": 24.799999237060548,
-            "visualHeight": 20.0
+            "visualWidth": 30.0,
+            "visualHeight": 30.0
         },
         {
             "id": "NewRoom_3",
-            "displayName": "New Room",
+            "displayName": "New Room_3",
             "nodeType": 0,
-            "x": 50.0,
-            "y": 0.0,
-            "logicalWidth": 10,
-            "logicalHeight": 10,
-            "templateName": "",
-            "visualWidth": 24.799999237060548,
-            "visualHeight": 20.0
-        },
-        {
-            "id": "NewRoom_4",
-            "displayName": "New Room",
-            "nodeType": 0,
-            "x": -10.0,
-            "y": 0.0,
-            "logicalWidth": 10,
-            "logicalHeight": 10,
-            "templateName": "",
-            "visualWidth": 24.799999237060548,
-            "visualHeight": 20.0
-        },
-        {
-            "id": "NewRoom_5",
-            "displayName": "New Room",
-            "nodeType": 0,
-            "x": 20.0,
+            "x": 0.0,
             "y": 20.0,
             "logicalWidth": 10,
             "logicalHeight": 10,
             "templateName": "",
-            "visualWidth": 24.799999237060548,
-            "visualHeight": 20.0
-        },
-        {
-            "id": "NewRoom_6",
-            "displayName": "New Room",
-            "nodeType": 0,
-            "x": -10.0,
-            "y": -40.0,
-            "logicalWidth": 10,
-            "logicalHeight": 10,
-            "templateName": "",
-            "visualWidth": 24.799999237060548,
-            "visualHeight": 20.0
+            "visualWidth": 30.0,
+            "visualHeight": 30.0
         }
     ],
     "connections": [
         {
-            "fromId": "NewRoom_6",
+            "fromId": "NewRoom_3",
             "toId": "NewRoom_1"
         },
         {
             "fromId": "NewRoom_1",
-            "toId": "NewRoom_4"
+            "toId": "NewRoom_2"
         },
         {
-            "fromId": "NewRoom_4",
+            "fromId": "NewRoom_2",
             "toId": "NewRoom_3"
-        },
-        {
-            "fromId": "NewRoom_3",
-            "toId": "NewRoom_2"
-        },
-        {
-            "fromId": "NewRoom_3",
-            "toId": "NewRoom_5"
-        },
-        {
-            "fromId": "NewRoom_1",
-            "toId": "NewRoom_2"
         }
     ]
 }

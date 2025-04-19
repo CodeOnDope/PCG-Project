@@ -3,8 +3,9 @@ using UnityEditor;
 using System.Collections.Generic;
 using System;
 using System.Linq;
+using UnityEngine.Tilemaps; // Needed for Tilemap checks
 
-// Note: Assumes GenerationMode enum is defined in a separate shared file.
+// Assumes GenerationMode enum is defined in LevelGenerationTypes.cs or similar
 [CustomEditor(typeof(HybridLevelGenerator))]
 public class HybridLevelGeneratorEditor : Editor
 {
@@ -32,14 +33,13 @@ public class HybridLevelGeneratorEditor : Editor
     SerializedProperty decorationPrefabProp;
     SerializedProperty enemiesPerRoomProp;
     SerializedProperty decorationsPerRoomProp;
+    SerializedProperty defaultSceneNodeSizeProp;
 
     // --- UI States ---
-    private bool isInitialSetup = true;
-    private float lastPreviewTime;
     private bool showFeedback = false;
     private string feedbackMessage = "";
     private MessageType feedbackType = MessageType.Info;
-    private float feedbackDuration = 3f;
+    private double feedbackExpireTime;
 
     // Section foldouts
     private bool showLevelDimensions = true;
@@ -48,36 +48,82 @@ public class HybridLevelGeneratorEditor : Editor
     private bool showCorridorSettings = true;
     private bool showTilemapSettings = true;
     private bool showEntitySettings = true;
+    private bool showHelp = false;
 
-    // --- Colors ---
-    private readonly Color headerColor = new Color(0.2f, 0.4f, 0.7f);
-    private readonly Color accentColor = new Color(0.3f, 0.6f, 1f);
-    private readonly Color generateColor = new Color(0.15f, 0.75f, 0.5f);
-    private readonly Color clearColor = new Color(0.85f, 0.25f, 0.25f);
-    private readonly Color[] modeColors = new Color[] {
-        new Color(0.4f, 0.6f, 0.9f, 0.7f),  // Fully Procedural
-        new Color(0.9f, 0.6f, 0.3f, 0.7f),  // Hybrid Procedural
-        new Color(0.4f, 0.8f, 0.5f, 0.7f)   // User Defined
-    };
+    // --- Styles & Content Cache ---
+    private GUIStyle headerStyle;
+    private GUIStyle foldoutHeaderStyle;
+    private GUIStyle subHeaderStyle;
+    private GUIStyle generateButtonStyle;
+    private GUIStyle clearButtonStyle;
+    private Color headerColor;
+    private Color accentColor;
+    private Color generateButtonColor; // Store actual color
+    private Color clearButtonColor;    // Store actual color
+    private readonly Color[] modeColors = new Color[Enum.GetNames(typeof(GenerationMode)).Length];
+    private GUIContent[] modeButtonContents;
 
-    // --- Animation Variables ---
+    private const float FOLDOUT_ANIM_SPEED = 3.0f;
+    private const float FEEDBACK_DURATION = 3.5f;
     private float pulseTime = 0f;
-    private int previousGenerationMode = -1;
-    private Dictionary<string, float> foldoutAnimations = new Dictionary<string, float>();
+    private Dictionary<string, float> foldoutAnimValues = new Dictionary<string, float>();
+    private bool stylesInitialized = false;
 
-    // --- Quick-help feature ---
-    private int quickHelpStep = -1;
-    private string[] quickHelpMessages = new string[] {
-        "Start by selecting a Generation Mode. Each has different strengths for level design.",
-        "Configure your Level Dimensions to set the overall size of your generated level.",
-        "Adjust BSP Settings to control how your level space is partitioned.",
-        "Make your levels unique with L-shaped rooms and Room Templates.",
-        "Add Players, Enemies, and Decorations to bring your level to life!"
-    };
+
+    private void InitializeStylesAndColors()
+    {
+        if (stylesInitialized) return;
+
+        headerColor = EditorGUIUtility.isProSkin ? new Color(0.18f, 0.22f, 0.25f) : new Color(0.8f, 0.82f, 0.85f);
+        accentColor = EditorGUIUtility.isProSkin ? new Color(0.3f, 0.6f, 1f) : new Color(0.2f, 0.5f, 0.9f);
+        modeColors[0] = EditorGUIUtility.isProSkin ? new Color(0.4f, 0.6f, 0.9f, 0.8f) : new Color(0.5f, 0.7f, 1.0f, 0.8f);
+        modeColors[1] = EditorGUIUtility.isProSkin ? new Color(0.9f, 0.6f, 0.3f, 0.8f) : new Color(1.0f, 0.7f, 0.4f, 0.8f);
+        modeColors[2] = EditorGUIUtility.isProSkin ? new Color(0.4f, 0.8f, 0.5f, 0.8f) : new Color(0.5f, 0.9f, 0.6f, 0.8f);
+        generateButtonColor = EditorGUIUtility.isProSkin ? new Color(0.2f, 0.7f, 0.5f) : new Color(0.3f, 0.8f, 0.6f);
+        clearButtonColor = EditorGUIUtility.isProSkin ? new Color(0.8f, 0.3f, 0.3f) : new Color(0.9f, 0.4f, 0.4f);
+
+        headerStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 16, alignment = TextAnchor.MiddleCenter, normal = { textColor = EditorGUIUtility.isProSkin ? new Color(0.8f, 0.85f, 0.9f) : new Color(0.1f, 0.1f, 0.1f) } };
+        foldoutHeaderStyle = new GUIStyle(EditorStyles.foldoutHeader) { fixedHeight = 22, fontSize = 12, fontStyle = FontStyle.Bold, padding = new RectOffset(15, 5, 3, 3) };
+        subHeaderStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 11, margin = new RectOffset(0, 0, 5, 2), normal = { textColor = EditorGUIUtility.isProSkin ? new Color(0.7f, 0.7f, 0.7f) : new Color(0.35f, 0.35f, 0.35f) } };
+        generateButtonStyle = new GUIStyle(GUI.skin.button) { fontSize = 12, fontStyle = FontStyle.Bold, fixedHeight = 40, alignment = TextAnchor.MiddleCenter };
+        clearButtonStyle = new GUIStyle(generateButtonStyle);
+
+        foldoutAnimValues["dimensions"] = showLevelDimensions ? 1f : 0f;
+        foldoutAnimValues["bsp"] = showBspSettings ? 1f : 0f;
+        foldoutAnimValues["hybrid"] = showHybridSettings ? 1f : 0f;
+        foldoutAnimValues["corridor"] = showCorridorSettings ? 1f : 0f;
+        foldoutAnimValues["tilemap"] = showTilemapSettings ? 1f : 0f;
+        foldoutAnimValues["entity"] = showEntitySettings ? 1f : 0f;
+
+        string[] modeNames = Enum.GetNames(typeof(GenerationMode));
+        modeButtonContents = new GUIContent[modeNames.Length];
+        for (int i = 0; i < modeNames.Length; i++)
+        {
+            modeButtonContents[i] = new GUIContent(ObjectNames.NicifyVariableName(modeNames[i]), GetModeTooltip((GenerationMode)i));
+        }
+
+        stylesInitialized = true;
+    }
+
+    private Texture2D MakeColorTexture(Color color)
+    {
+        Texture2D tex = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
+        tex.SetPixel(0, 0, color); tex.Apply(); return tex;
+    }
+
+    private string GetModeTooltip(GenerationMode mode)
+    { /* (Same as before) */
+        switch (mode)
+        {
+            case GenerationMode.FullyProcedural: return "Generates level using BSP partitions, rectangular rooms, and MST corridors.";
+            case GenerationMode.HybridProcedural: return "Generates level using BSP, mixing Rectangles, L-Shapes, and Room Templates.";
+            case GenerationMode.UserDefinedLayout: return "Generates level based on RoomNode components placed manually in the scene via the Visual Level Designer.";
+            default: return "";
+        }
+    }
 
     private void OnEnable()
     {
-        // Find properties
         generationModeProp = serializedObject.FindProperty("generationMode");
         levelWidthProp = serializedObject.FindProperty("levelWidth");
         levelHeightProp = serializedObject.FindProperty("levelHeight");
@@ -101,935 +147,232 @@ public class HybridLevelGeneratorEditor : Editor
         decorationPrefabProp = serializedObject.FindProperty("decorationPrefab");
         enemiesPerRoomProp = serializedObject.FindProperty("enemiesPerRoom");
         decorationsPerRoomProp = serializedObject.FindProperty("decorationsPerRoom");
+        defaultSceneNodeSizeProp = serializedObject.FindProperty("defaultSceneNodeSize");
 
-        // Store previous mode
-        previousGenerationMode = generationModeProp.intValue;
+        stylesInitialized = false; // Reinitialize styles
 
-        // Initialize foldout animations
-        foldoutAnimations["dimensions"] = showLevelDimensions ? 1f : 0f;
-        foldoutAnimations["bsp"] = showBspSettings ? 1f : 0f;
-        foldoutAnimations["hybrid"] = showHybridSettings ? 1f : 0f;
-        foldoutAnimations["corridor"] = showCorridorSettings ? 1f : 0f;
-        foldoutAnimations["tilemap"] = showTilemapSettings ? 1f : 0f;
-        foldoutAnimations["entity"] = showEntitySettings ? 1f : 0f;
-
-        // Register for editor updates
+        EditorApplication.update -= OnEditorUpdate;
         EditorApplication.update += OnEditorUpdate;
     }
 
-    private void OnDisable()
-    {
-        // Unregister from editor updates
-        EditorApplication.update -= OnEditorUpdate;
-    }
+    private void OnDisable() { EditorApplication.update -= OnEditorUpdate; }
 
     private void OnEditorUpdate()
-    {
-        // Update animations
+    { /* (Same as before) */
         bool needsRepaint = false;
-
-        // Pulse animation
-        pulseTime = (pulseTime + Time.deltaTime) % 6.28f; // 2π
-
-        // Section slide animations - allow 0.5 seconds for transitions
-        const float animationSpeed = 2.0f; // Animation speed multiplier
-        foreach (var key in foldoutAnimations.Keys.ToArray())
-        {
-            float target = 0f;
-            switch (key)
-            {
-                case "dimensions": target = showLevelDimensions ? 1f : 0f; break;
-                case "bsp": target = showBspSettings ? 1f : 0f; break;
-                case "hybrid": target = showHybridSettings ? 1f : 0f; break;
-                case "corridor": target = showCorridorSettings ? 1f : 0f; break;
-                case "tilemap": target = showTilemapSettings ? 1f : 0f; break;
-                case "entity": target = showEntitySettings ? 1f : 0f; break;
-            }
-
-            float current = foldoutAnimations[key];
-            if (current != target)
-            {
-                // Smoothly move toward target value
-                if (current < target)
-                    foldoutAnimations[key] = Mathf.Min(current + Time.deltaTime * animationSpeed, target);
-                else
-                    foldoutAnimations[key] = Mathf.Max(current - Time.deltaTime * animationSpeed, target);
-
-                needsRepaint = true;
-            }
-        }
-
-        // Handle timed feedback messages
-        if (showFeedback && EditorApplication.timeSinceStartup - lastPreviewTime > feedbackDuration)
-        {
-            showFeedback = false;
-            needsRepaint = true;
-        }
-
-        if (needsRepaint)
-            Repaint();
+        pulseTime = (float)(EditorApplication.timeSinceStartup * 2.5) % (2f * Mathf.PI);
+        UpdateFoldoutAnimation("dimensions", showLevelDimensions, ref needsRepaint);
+        UpdateFoldoutAnimation("bsp", showBspSettings, ref needsRepaint);
+        UpdateFoldoutAnimation("hybrid", showHybridSettings, ref needsRepaint);
+        UpdateFoldoutAnimation("corridor", showCorridorSettings, ref needsRepaint);
+        UpdateFoldoutAnimation("tilemap", showTilemapSettings, ref needsRepaint);
+        UpdateFoldoutAnimation("entity", showEntitySettings, ref needsRepaint);
+        if (showFeedback && EditorApplication.timeSinceStartup > feedbackExpireTime) { showFeedback = false; needsRepaint = true; }
+        if (needsRepaint) Repaint();
     }
-
-    // Show feedback message for a set duration
-    private void ShowFeedback(string message, MessageType type = MessageType.Info, float duration = 3f)
-    {
-        feedbackMessage = message;
-        feedbackType = type;
-        showFeedback = true;
-        lastPreviewTime = (float)EditorApplication.timeSinceStartup;
-        feedbackDuration = duration;
-        Repaint();
+    private void UpdateFoldoutAnimation(string key, bool targetState, ref bool needsRepaint)
+    { /* (Same as before) */
+        float targetValue = targetState ? 1f : 0f; if (!foldoutAnimValues.ContainsKey(key)) { foldoutAnimValues[key] = targetValue; }
+        float currentValue = foldoutAnimValues[key]; if (!Mathf.Approximately(currentValue, targetValue)) { foldoutAnimValues[key] = Mathf.MoveTowards(currentValue, targetValue, Time.deltaTime * FOLDOUT_ANIM_SPEED); needsRepaint = true; }
+    }
+    private void ShowFeedback(string message, MessageType type = MessageType.Info, float duration = FEEDBACK_DURATION)
+    { /* (Same as before) */
+        feedbackMessage = message; feedbackType = type; showFeedback = true; feedbackExpireTime = EditorApplication.timeSinceStartup + duration; Repaint();
+    }
+    private bool AreCoreComponentsAssigned()
+    { /* (Same as before) */
+        return groundTilemapProp.objectReferenceValue != null && wallTilemapProp.objectReferenceValue != null && floorTileProp.objectReferenceValue != null && wallTileProp.objectReferenceValue != null;
     }
 
     public override void OnInspectorGUI()
     {
+        InitializeStylesAndColors();
         serializedObject.Update();
 
-        // Cache the background color
-        Color cachedBgColor = GUI.backgroundColor;
+        Color originalBgColor = GUI.backgroundColor;
+        Color originalContentColor = GUI.contentColor;
+        GUI.contentColor = EditorGUIUtility.isProSkin ? Color.white * 0.9f : Color.black * 0.9f; // Slightly adjust default text color
 
-        // Check for changes to update preview
         EditorGUI.BeginChangeCheck();
 
-        // Draw stylish header
         DrawHeader();
-
-        // Draw Generation Mode selector (the main control)
         DrawGenerationModeSelector();
 
-        // Draw all settings in one scrollable panel
-        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
-        // Level dimensions section (always visible)
-        DrawFoldoutSection("dimensions", "Level Dimensions", ref showLevelDimensions, DrawLevelDimensionsSection);
-
-        // BSP Settings (visible for Fully Procedural and Hybrid modes)
-        GenerationMode currentMode = (GenerationMode)generationModeProp.intValue;
-        if (currentMode == GenerationMode.FullyProcedural || currentMode == GenerationMode.HybridProcedural)
+        bool coreComponentsOk = AreCoreComponentsAssigned();
+        if (!coreComponentsOk)
         {
-            DrawFoldoutSection("bsp", "BSP Algorithm Settings", ref showBspSettings, DrawBspSection);
+            EditorGUILayout.HelpBox("Essential Tilemaps or Tiles are missing! Assign Ground/Wall Tilemaps and Floor/Wall Tiles.", MessageType.Error);
         }
 
-        // Hybrid Settings (only visible for Hybrid mode)
-        if (currentMode == GenerationMode.HybridProcedural)
-        {
-            DrawFoldoutSection("hybrid", "Room Type Settings", ref showHybridSettings, DrawHybridSection);
-        }
-
-        // Corridor Settings (always visible)
+        // --- Main Settings Area ---
+        EditorGUILayout.BeginVertical(GUI.skin.box);
+        DrawFoldoutSection("dimensions", "Level Dimensions & Seed", ref showLevelDimensions, DrawLevelDimensionsSection);
+        GenerationMode currentMode = (GenerationMode)generationModeProp.enumValueIndex;
+        EditorGUI.BeginDisabledGroup(currentMode == GenerationMode.UserDefinedLayout);
+        if (currentMode == GenerationMode.FullyProcedural || currentMode == GenerationMode.HybridProcedural) { DrawFoldoutSection("bsp", "BSP Algorithm Settings", ref showBspSettings, DrawBspSection); }
+        if (currentMode == GenerationMode.HybridProcedural) { DrawFoldoutSection("hybrid", "Hybrid Room Settings", ref showHybridSettings, DrawHybridSection); }
+        EditorGUI.EndDisabledGroup();
         DrawFoldoutSection("corridor", "Corridor Settings", ref showCorridorSettings, DrawCorridorSection);
-
-        // Tilemap Settings (always visible)
         DrawFoldoutSection("tilemap", "Tiles & Tilemaps", ref showTilemapSettings, DrawTilemapSection);
-
-        // Entity Settings (always visible)
-        DrawFoldoutSection("entity", "Entity Settings", ref showEntitySettings, DrawEntitySection);
-
+        DrawFoldoutSection("entity", "Entities & Decorations", ref showEntitySettings, DrawEntitySection);
         EditorGUILayout.EndVertical();
+        // --- End Main Settings Area ---
 
-        // Show feedback message if active
+        // --- Feedback Area ---
         if (showFeedback)
         {
-            EditorGUILayout.Space(5);
-            EditorGUILayout.HelpBox(feedbackMessage, feedbackType);
+            EditorGUILayout.Space(5); EditorGUILayout.HelpBox(feedbackMessage, feedbackType);
+            Rect fbRect = GUILayoutUtility.GetLastRect(); Color cc = GUI.contentColor; GUI.contentColor = Color.grey;
+            if (GUI.Button(new Rect(fbRect.xMax - 18, fbRect.y + 1, 16, 16), "x", EditorStyles.miniButton)) { showFeedback = false; }
+            GUI.contentColor = cc;
         }
+        // --- End Feedback Area ---
 
-        // Bottom action controls - always visible
-        EditorGUILayout.Space(10);
+        // --- Action Buttons Area ---
+        EditorGUILayout.Space(15);
+        EditorGUI.BeginDisabledGroup(!coreComponentsOk); // Disable if core refs missing
         EditorGUILayout.BeginHorizontal();
 
-        // Generate Button
-        GUI.backgroundColor = generateColor;
-        if (GUILayout.Button("Generate Level", GUILayout.Height(40)))
+        GUI.backgroundColor = generateButtonColor;
+        if (GUILayout.Button(new GUIContent(" Generate Level", EditorGUIUtility.IconContent("d_PlayButton On").image, "Generate the level using current settings"), generateButtonStyle))
         {
-            HybridLevelGenerator generator = (HybridLevelGenerator)target;
-            Undo.RecordObject(generator, "Generate Level");
-            generator.GenerateLevel();
-            MarkSceneDirty(generator);
-
-            // Show feedback
-            ShowFeedback("Level Generated Successfully!", MessageType.Info);
+            HybridLevelGenerator generator = (HybridLevelGenerator)target; Undo.RecordObject(generator, "Generate Level Action");
+            bool skipClearFlag = (generator.generationMode == GenerationMode.UserDefinedLayout); generator.GenerateLevel(skipClearFlag);
+            MarkSceneDirty(generator); ShowFeedback("Level Generation Triggered!", MessageType.Info);
         }
 
-        // Clear Button
-        GUI.backgroundColor = clearColor;
-        if (GUILayout.Button("Clear Level", GUILayout.Height(40)))
+        GUI.backgroundColor = clearButtonColor;
+        if (GUILayout.Button(new GUIContent(" Clear Level", EditorGUIUtility.IconContent("d_TreeEditor.Trash").image, "Clear generated tiles, entities, AND scene RoomNodes"), clearButtonStyle))
         {
             HybridLevelGenerator generator = (HybridLevelGenerator)target;
-            if (EditorUtility.DisplayDialog("Confirm Clear",
-                "Clear generated level AND scene design nodes?",
-                "Clear All", "Cancel"))
+            if (EditorUtility.DisplayDialog("Confirm Clear", "Clear generated level content AND scene design nodes (LevelDesignRoot)?", "Clear All", "Cancel"))
             {
-                Undo.RecordObject(generator, "Clear Level");
-                generator.ClearLevel();
-                MarkSceneDirty(generator);
-
-                // Show feedback
-                ShowFeedback("Level Cleared", MessageType.Info);
+                Undo.RecordObject(generator, "Clear Level"); generator.ClearLevel(); MarkSceneDirty(generator); ShowFeedback("Level Cleared", MessageType.Info);
             }
         }
 
-        GUI.backgroundColor = cachedBgColor;
         EditorGUILayout.EndHorizontal();
+        GUI.backgroundColor = originalBgColor; EditorGUI.EndDisabledGroup();
+        EditorGUILayout.Space(10);
+        // --- End Action Buttons Area ---
 
-        // Show Quick-Help if enabled
-        if (quickHelpStep >= 0 && quickHelpStep < quickHelpMessages.Length)
-        {
-            EditorGUILayout.Space(10);
-            EditorGUILayout.HelpBox($"TIP {quickHelpStep + 1}/{quickHelpMessages.Length}: {quickHelpMessages[quickHelpStep]}",
-                MessageType.Info);
+        // --- Simple Help Toggle ---
+        showHelp = EditorGUILayout.ToggleLeft(" Show Basic Help", showHelp);
+        if (showHelp) { EditorGUILayout.HelpBox("Workflow:\n1. Select Mode.\n2. Configure Dimensions & Settings.\n3. Assign Tilemaps & Tiles.\n4. Assign Entities (Optional).\n5. Generate Level!\n(Use Visual Designer for User Defined Layout setup).", MessageType.None); }
+        // --- End Simple Help Toggle ---
 
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button(quickHelpStep < quickHelpMessages.Length - 1 ? "Next Tip" : "Close Help",
-                GUILayout.Width(100)))
-            {
-                quickHelpStep++;
-                if (quickHelpStep >= quickHelpMessages.Length)
-                {
-                    quickHelpStep = -1;
-                }
-            }
-            EditorGUILayout.EndHorizontal();
-        }
+        if (EditorGUI.EndChangeCheck()) { serializedObject.ApplyModifiedProperties(); }
 
-        // Check for generation mode change
-        if (previousGenerationMode != generationModeProp.intValue)
-        {
-            // Mode has changed
-            previousGenerationMode = generationModeProp.intValue;
-
-            // Auto-show settings relevant to the new mode
-            if (generationModeProp.intValue == (int)GenerationMode.HybridProcedural)
-            {
-                showHybridSettings = true;
-                foldoutAnimations["hybrid"] = 0.01f; // Start animation
-                ShowFeedback("Hybrid mode enables L-shaped rooms and room templates", MessageType.Info);
-            }
-            else if (generationModeProp.intValue == (int)GenerationMode.UserDefinedLayout)
-            {
-                ShowFeedback("User Defined mode requires using the Visual Level Designer", MessageType.Info);
-            }
-        }
-
-        // Check if any property was modified
-        if (EditorGUI.EndChangeCheck())
-        {
-            // Give feedback about changes
-            if (!showFeedback) // Don't overwrite more specific feedback
-                ShowFeedback("Settings updated", MessageType.Info, 1.5f);
-        }
-
-        serializedObject.ApplyModifiedProperties();
-
-        // Initial setup prompt for new users
-        if (isInitialSetup)
-        {
-            isInitialSetup = false;
-            if (EditorUtility.DisplayDialog("Procedural Level Generator Setup",
-                "Welcome to the Procedural Level Generator!\n\nWould you like to enable the Quick Help Guide to get started?",
-                "Yes, Show Help", "No Thanks"))
-            {
-                quickHelpStep = 0;
-            }
-        }
+        GUI.backgroundColor = originalBgColor; GUI.contentColor = originalContentColor; // Restore defaults
     }
 
-    private void DrawHeader()
-    {
-        EditorGUILayout.Space(5);
-
-        GUIStyle headerStyle = new GUIStyle(EditorStyles.boldLabel);
-        headerStyle.fontSize = 16;
-        headerStyle.alignment = TextAnchor.MiddleCenter;
-
-        Rect headerRect = GUILayoutUtility.GetRect(GUIContent.none, headerStyle, GUILayout.Height(30));
-        EditorGUI.DrawRect(headerRect, headerColor);
-
-        // Adjust text color for better contrast
-        headerStyle.normal.textColor = Color.white;
-        GUI.Label(headerRect, "PROCEDURAL LEVEL GENERATOR", headerStyle);
-
-        EditorGUILayout.Space(5);
-    }
+    // --- Section Drawing Helpers ---
+    private void DrawHeader() { /* (Same as before) */ EditorGUILayout.Space(5); Rect r = GUILayoutUtility.GetRect(GUIContent.none, headerStyle, GUILayout.Height(30)); EditorGUI.DrawRect(r, headerColor); GUI.Label(r, "Hybrid Procedural Level Generator", headerStyle); EditorGUILayout.Space(10); }
 
     private void DrawGenerationModeSelector()
-    {
-        EditorGUILayout.Space(5);
-        EditorGUILayout.LabelField("Select Generation Method", EditorStyles.boldLabel);
-
-        // Get current mode
-        int currentMode = generationModeProp.intValue;
-
-        // Animation pulse effect for the selected button
-        float pulse = 0.8f + 0.2f * Mathf.Sin(pulseTime * 2);
-
-        // Mode selection buttons
+    { /* (Same as before, uses cached GUIContent) */
+        EditorGUILayout.LabelField("Generation Mode", EditorStyles.boldLabel);
+        int currentModeIndex = generationModeProp.enumValueIndex; float pulse = 0.5f + 0.5f * Mathf.Abs(Mathf.Sin(pulseTime));
         EditorGUILayout.BeginHorizontal();
-
-        for (int i = 0; i < 3; i++) // Assuming 3 generation modes
+        for (int i = 0; i < modeButtonContents.Length; i++)
         {
-            // Determine if this mode is selected
-            bool isSelected = currentMode == i;
-
-            // Determine button style and color
-            GUIStyle buttonStyle = new GUIStyle(GUI.skin.button);
-            buttonStyle.fontStyle = isSelected ? FontStyle.Bold : FontStyle.Normal;
-            buttonStyle.normal.textColor = isSelected ? Color.white : Color.black;
-            buttonStyle.fixedHeight = 30;
-
-            // Apply pulse animation if selected
-            Color btnColor = modeColors[i];
-            if (isSelected)
-            {
-                btnColor.a *= pulse; // Pulsing effect
-            }
-
-            // Draw the button
-            GUI.backgroundColor = btnColor;
-            string modeName = ((GenerationMode)i).ToString();
-
-            // Split camel case for display
-            string displayName = System.Text.RegularExpressions.Regex.Replace(
-                modeName, "([a-z](?=[A-Z]))", "$1 ");
-
-            if (GUILayout.Button(displayName, buttonStyle))
-            {
-                generationModeProp.intValue = i;
-                GUI.FocusControl(null); // Clear focus
-            }
+            bool isSelected = currentModeIndex == i; GUIStyle btnStyle = new GUIStyle(GUI.skin.button); btnStyle.fixedHeight = 30;
+            Color normalBg = modeColors[i] * (EditorGUIUtility.isProSkin ? 0.7f : 1.0f); Color selBg = modeColors[i] * (EditorGUIUtility.isProSkin ? 1.2f : 0.8f); selBg.a = 1.0f;
+            Color txtCol = EditorGUIUtility.isProSkin ? Color.white * 0.8f : Color.black * 0.8f; Color selTxtCol = EditorGUIUtility.isProSkin ? Color.white : Color.black;
+            if (isSelected) { GUI.backgroundColor = Color.Lerp(selBg, selBg * 1.15f, pulse); btnStyle.normal.textColor = selTxtCol; btnStyle.fontStyle = FontStyle.Bold; } else { GUI.backgroundColor = normalBg; btnStyle.normal.textColor = txtCol; }
+            if (GUILayout.Button(modeButtonContents[i], btnStyle)) { if (generationModeProp.enumValueIndex != i) { generationModeProp.enumValueIndex = i; ShowFeedback($"{modeButtonContents[i].text} mode selected.", MessageType.Info); } GUI.FocusControl(null); }
         }
+        GUI.backgroundColor = Color.white; EditorGUILayout.EndHorizontal();
+        EditorGUILayout.HelpBox(GetModeHelpText((GenerationMode)currentModeIndex), MessageType.Info);
+        if ((GenerationMode)currentModeIndex == GenerationMode.UserDefinedLayout)
+        {
+            EditorGUILayout.Space(5); Color obg = GUI.backgroundColor; GUI.backgroundColor = accentColor * (EditorGUIUtility.isProSkin ? 1.0f : 1.3f);
+            if (GUILayout.Button(new GUIContent(" Open Visual Level Designer", EditorGUIUtility.IconContent("d_EditCollider").image), GUILayout.Height(30)))
+            {
+                var win = EditorWindow.GetWindow<VisualLevelDesignEditor>("Visual Level Designer"); win.Show(); win.Focus(); ShowFeedback("Visual Level Designer opened.", MessageType.Info);
+            }
+            GUI.backgroundColor = obg;
+        }
+        EditorGUILayout.Space(10);
+    }
 
-        GUI.backgroundColor = Color.white; // Reset color
-        EditorGUILayout.EndHorizontal();
+    // Foldout helper using FadeGroup
+    private void DrawFoldoutSection(string key, string title, ref bool foldout, Action drawContent)
+    { /* (Same as before) */
+        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+        bool newState = EditorGUILayout.Foldout(foldout, title, true, foldoutHeaderStyle); if (newState != foldout) { foldout = newState; }
+        if (foldoutAnimValues.ContainsKey(key)) { if (EditorGUILayout.BeginFadeGroup(foldoutAnimValues[key])) { EditorGUI.indentLevel++; EditorGUILayout.Space(5); if (drawContent != null) { drawContent(); } EditorGUILayout.Space(5); EditorGUI.indentLevel--; } EditorGUILayout.EndFadeGroup(); }
+        EditorGUILayout.EndVertical(); EditorGUILayout.Space(3);
+    }
 
-        // Help text for the selected mode
-        string helpText = "";
-        switch ((GenerationMode)currentMode)
+    // --- Specific Section Drawing Methods ---
+    private void DrawLevelDimensionsSection()
+    { /* (Same as before, uses PropertyField) */
+        EditorGUILayout.PropertyField(levelWidthProp, new GUIContent("Level Width", "Max grid width."));
+        EditorGUILayout.PropertyField(levelHeightProp, new GUIContent("Level Height", "Max grid height."));
+        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Random Seed", subHeaderStyle);
+        EditorGUILayout.PropertyField(useRandomSeedProp, new GUIContent("Use Random Seed", "Use time-based seed?"));
+        EditorGUI.BeginDisabledGroup(useRandomSeedProp.boolValue); EditorGUILayout.BeginHorizontal(); EditorGUILayout.PropertyField(seedProp, new GUIContent("Seed Value", "Manual seed.")); if (GUILayout.Button("New", EditorStyles.miniButton, GUILayout.Width(50))) { seedProp.intValue = UnityEngine.Random.Range(1, 999999); ShowFeedback($"New seed: {seedProp.intValue}", MessageType.None, 2.0f); }
+        EditorGUILayout.EndHorizontal(); EditorGUI.EndDisabledGroup();
+    }
+    private void DrawBspSection()
+    { /* (Same as before, uses PropertyField) */
+        EditorGUILayout.PropertyField(minRoomSizeProp, new GUIContent("Min Room Size", "Min width/height for BSP leaves & Rects."));
+        EditorGUILayout.PropertyField(maxIterationsProp, new GUIContent("BSP Iterations", "Number of BSP splits."));
+        EditorGUILayout.PropertyField(roomPaddingProp, new GUIContent("Room Padding", "Empty cells between procedural rooms."));
+    }
+    private void DrawHybridSection()
+    { /* (Same as before, uses PropertyField/Slider where appropriate) */
+        EditorGUILayout.LabelField("Procedural Room Chances", subHeaderStyle);
+        EditorGUILayout.PropertyField(lShapeProbabilityProp, new GUIContent("L-Shape Chance", "Chance (0-1) for proc. room = L-Shape."));
+        EditorGUILayout.PropertyField(roomTemplateProbabilityProp, new GUIContent("Template Chance", "Chance (0-1) for proc. room = Template."));
+        if (lShapeProbabilityProp.floatValue + roomTemplateProbabilityProp.floatValue > 1.01f) { EditorGUILayout.HelpBox("Probabilities exceed 100%.", MessageType.Warning); }
+        EditorGUILayout.Space(5); EditorGUILayout.LabelField("L-Shape Leg Ratios", subHeaderStyle);
+        minLLegRatioProp.floatValue = EditorGUILayout.Slider(new GUIContent("Min Leg Ratio", "Min size ratio of smaller leg."), minLLegRatioProp.floatValue, 0.2f, 0.8f);
+        maxLLegRatioProp.floatValue = EditorGUILayout.Slider(new GUIContent("Max Leg Ratio", "Max size ratio of smaller leg."), maxLLegRatioProp.floatValue, minLLegRatioProp.floatValue, 0.8f);
+        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Room Templates List", subHeaderStyle);
+        EditorGUILayout.PropertyField(roomTemplatePrefabsProp, true); EditorGUILayout.HelpBox("Assign Room Template Prefabs (must contain Tilemap).", MessageType.None);
+        EditorGUILayout.Space(5); EditorGUILayout.LabelField("User Defined Node Default", subHeaderStyle);
+        EditorGUILayout.PropertyField(defaultSceneNodeSizeProp, new GUIContent("Default Node Size", "Size for UserDefined nodes if size is zero."));
+    }
+    private void DrawCorridorSection()
+    { /* (Same as before, uses PropertyField) */
+        EditorGUILayout.PropertyField(corridorWidthProp, new GUIContent("Corridor Width", "Width of corridors (in tiles)."));
+    }
+    private void DrawTilemapSection()
+    { /* (Same as before, uses PropertyField) */
+        EditorGUILayout.LabelField("Required Tilemaps", subHeaderStyle);
+        EditorGUILayout.PropertyField(groundTilemapProp, new GUIContent("Ground Tilemap"));
+        EditorGUILayout.PropertyField(wallTilemapProp, new GUIContent("Wall Tilemap"));
+        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Required Tiles", subHeaderStyle);
+        EditorGUILayout.PropertyField(floorTileProp, new GUIContent("Floor Tile"));
+        EditorGUILayout.PropertyField(wallTileProp, new GUIContent("Wall Tile"));
+    }
+    private void DrawEntitySection()
+    { /* (Same as before, uses PropertyField/IntSlider) */
+        EditorGUILayout.LabelField("Player", subHeaderStyle); EditorGUILayout.PropertyField(playerPrefabProp, new GUIContent("Player Prefab"));
+        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Enemies", subHeaderStyle); EditorGUILayout.PropertyField(enemyPrefabProp, new GUIContent("Enemy Prefab")); EditorGUILayout.PropertyField(enemiesPerRoomProp, new GUIContent("Max Enemies/Room")); // Using PropertyField for Range attribute
+        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Decorations", subHeaderStyle); EditorGUILayout.PropertyField(decorationPrefabProp, new GUIContent("Decoration Prefab")); EditorGUILayout.PropertyField(decorationsPerRoomProp, new GUIContent("Max Decors/Room"));
+    } // Using PropertyField for Range attribute
+
+    // --- Utility ---
+    private void MarkSceneDirty(HybridLevelGenerator generator)
+    { /* (Same as before) */
+        if (!Application.isPlaying && generator != null && generator.gameObject != null) { try { if (generator.gameObject.scene != null && generator.gameObject.scene.IsValid() && generator.gameObject.scene.isLoaded) { UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene); } } catch (Exception e) { Debug.LogWarning($"Could not mark scene dirty: {e.Message}"); } }
+    }
+    private string GetModeHelpText(GenerationMode mode)
+    {
+        switch (mode)
         {
             case GenerationMode.FullyProcedural:
-                helpText = "BSP + Random Rect Rooms + MST Corridors.\nBest for: Roguelike dungeons with rectangular rooms";
-                break;
+                return "BSP partitions + Random Rect rooms + MST corridors.\nGood for classic roguelike dungeons.";
             case GenerationMode.HybridProcedural:
-                helpText = "BSP + Templates/L-Shapes/Rects + MST Corridors.\nBest for: Varied levels with predefined room templates";
-                break;
+                return "BSP partitions + mix of Rects, L-Shapes, and Room Templates + MST corridors.\nOffers more variety.";
             case GenerationMode.UserDefinedLayout:
-                helpText = "Uses RoomNode components in the scene.\nBest for: Hand-crafted levels with procedural elements";
-                break;
-        }
-
-        EditorGUILayout.HelpBox(helpText, MessageType.Info);
-
-        // Open Designer Button (if User-Defined mode)
-        if ((GenerationMode)currentMode == GenerationMode.UserDefinedLayout)
-        {
-            EditorGUILayout.Space(5);
-            Color cachedBgColor = GUI.backgroundColor;
-            GUI.backgroundColor = accentColor;
-            if (GUILayout.Button("Open Visual Level Designer", GUILayout.Height(30)))
-            {
-                VisualLevelDesignEditor.ShowWindow();
-                ShowFeedback("Visual Level Designer opened", MessageType.Info);
-            }
-            GUI.backgroundColor = cachedBgColor;
-        }
-
-        EditorGUILayout.Space(5);
-    }
-
-    private void DrawFoldoutSection(string key, string title, ref bool foldout, Action drawContent)
-    {
-        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
-        Rect foldoutRect = EditorGUILayout.GetControlRect(true);
-        bool newFoldout = EditorGUI.Foldout(foldoutRect, foldout, title, true, EditorStyles.foldoutHeader);
-
-        // If foldout state changed
-        if (newFoldout != foldout)
-        {
-            foldout = newFoldout;
-            // Don't change animation value immediately - let animation handle it
-        }
-
-        // Get animated progress value (0-1)
-        float progress = foldoutAnimations[key];
-
-        if (progress > 0.01f) // Draw if at least slightly visible
-        {
-            // Calculate height for animated opening/closing
-            float fadeHeight = progress; // Multiply by max height if needed for larger sections
-
-            // Semi-transparent during transition
-            GUI.color = new Color(1, 1, 1, progress);
-
-            // Begin animation clip area
-            EditorGUILayout.BeginVertical();
-
-            if (progress < 1.0f)
-            {
-                // Animated sliding effect
-                GUILayout.Space(10 * (1.0f - progress)); // Slide down effect
-            }
-
-            if (drawContent != null)
-            {
-                drawContent();
-            }
-
-            EditorGUILayout.EndVertical();
-
-            // Reset color
-            GUI.color = Color.white;
-        }
-
-        EditorGUILayout.EndVertical();
-    }
-
-    private void DrawLevelDimensionsSection()
-    {
-        EditorGUILayout.Space(5);
-
-        // Level size field with visual slider
-        EditorGUI.BeginChangeCheck();
-
-        // Width slider with better visual feedback
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.PrefixLabel("Width");
-        EditorGUILayout.BeginVertical();
-        levelWidthProp.intValue = EditorGUILayout.IntSlider(levelWidthProp.intValue, 10, 100);
-
-        // Draw a visual representation of width
-        Rect widthRect = EditorGUILayout.GetControlRect(false, 8);
-        float widthPercentage = (levelWidthProp.intValue - 10f) / 90f; // 10 to 100 range
-        Rect filledRect = new Rect(widthRect.x, widthRect.y, widthRect.width * widthPercentage, widthRect.height);
-        EditorGUI.DrawRect(widthRect, new Color(0.3f, 0.3f, 0.3f));
-        EditorGUI.DrawRect(filledRect, accentColor);
-        EditorGUILayout.EndVertical();
-        EditorGUILayout.EndHorizontal();
-
-        // Height slider with visual feedback
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.PrefixLabel("Height");
-        EditorGUILayout.BeginVertical();
-        levelHeightProp.intValue = EditorGUILayout.IntSlider(levelHeightProp.intValue, 10, 100);
-
-        // Draw a visual representation of height
-        Rect heightRect = EditorGUILayout.GetControlRect(false, 8);
-        float heightPercentage = (levelHeightProp.intValue - 10f) / 90f; // 10 to 100 range
-        Rect filledHeightRect = new Rect(heightRect.x, heightRect.y, heightRect.width * heightPercentage, heightRect.height);
-        EditorGUI.DrawRect(heightRect, new Color(0.3f, 0.3f, 0.3f));
-        EditorGUI.DrawRect(filledHeightRect, accentColor);
-        EditorGUILayout.EndVertical();
-        EditorGUILayout.EndHorizontal();
-
-        // Preview area showing relative dimensions
-        float aspectRatio = (float)levelWidthProp.intValue / levelHeightProp.intValue;
-        float previewHeight = 60; // Fixed height
-        float previewWidth = previewHeight * aspectRatio;
-
-        // Limit preview width
-        if (previewWidth > 300)
-        {
-            previewWidth = 300;
-            previewHeight = previewWidth / aspectRatio;
-        }
-
-        // Center the preview
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        Rect previewRect = GUILayoutUtility.GetRect(previewWidth, previewHeight);
-
-        // Pulse effect for the preview
-        float pulse = 0.8f + 0.2f * Mathf.Sin(pulseTime);
-        Color previewColor = new Color(accentColor.r * pulse, accentColor.g * pulse, accentColor.b);
-
-        EditorGUI.DrawRect(previewRect, previewColor);
-        GUI.Label(previewRect, $"{levelWidthProp.intValue} x {levelHeightProp.intValue}",
-            new GUIStyle(EditorStyles.boldLabel)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white }
-            });
-        GUILayout.FlexibleSpace();
-        EditorGUILayout.EndHorizontal();
-
-        EditorGUILayout.Space(5);
-
-        // Randomness Section
-        EditorGUILayout.LabelField("Randomness", EditorStyles.boldLabel);
-
-        // Use a more intuitive toggle with explanation
-        bool useRandom = EditorGUILayout.Toggle("Use Random Seed", useRandomSeedProp.boolValue);
-        if (useRandom != useRandomSeedProp.boolValue)
-        {
-            useRandomSeedProp.boolValue = useRandom;
-            if (useRandom)
-            {
-                ShowFeedback("Using a random seed each time", MessageType.Info);
-            }
-            else
-            {
-                ShowFeedback("Using fixed seed value", MessageType.Info);
-            }
-        }
-
-        if (!useRandomSeedProp.boolValue)
-        {
-            EditorGUILayout.BeginHorizontal();
-
-            int oldSeed = seedProp.intValue;
-            EditorGUILayout.PropertyField(seedProp, new GUIContent("Seed Value"));
-
-            // Button to randomize seed
-            if (GUILayout.Button("Randomize", EditorStyles.miniButton, GUILayout.Width(70)))
-            {
-                seedProp.intValue = UnityEngine.Random.Range(1, 9999);
-                ShowFeedback($"New seed: {seedProp.intValue}", MessageType.Info);
-            }
-
-            EditorGUILayout.EndHorizontal();
-
-            // Show visual feedback of seed change
-            if (oldSeed != seedProp.intValue && Event.current.type == EventType.Used)
-            {
-                ShowFeedback($"Seed changed to: {seedProp.intValue}", MessageType.Info);
-            }
-        }
-        else
-        {
-            EditorGUILayout.HelpBox("A new random seed will be generated each time.", MessageType.Info);
+                return "Generates layout based on RoomNode components placed in the scene.\nRequires setup using the 'Open Visual Level Designer' window.";
+            default:
+                return "Unknown Generation Mode Selected.";
         }
     }
 
-    private void DrawBspSection()
-    {
-        EditorGUILayout.Space(5);
-
-        // Min Room Size with visual slider
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.PrefixLabel("Min Room Size");
-        EditorGUILayout.BeginVertical();
-        minRoomSizeProp.intValue = EditorGUILayout.IntSlider(minRoomSizeProp.intValue, 3, 20);
-
-        // Draw a visual representation
-        Rect sizeRect = EditorGUILayout.GetControlRect(false, 8);
-        float sizePercentage = (minRoomSizeProp.intValue - 3f) / 17f; // 3 to 20 range
-        Rect filledRect = new Rect(sizeRect.x, sizeRect.y, sizeRect.width * sizePercentage, sizeRect.height);
-        EditorGUI.DrawRect(sizeRect, new Color(0.3f, 0.3f, 0.3f));
-        EditorGUI.DrawRect(filledRect, accentColor);
-        EditorGUILayout.EndVertical();
-        EditorGUILayout.EndHorizontal();
-
-        // BSP Iterations with visual effect
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.PrefixLabel("BSP Iterations");
-        EditorGUILayout.BeginVertical();
-        int oldValue = maxIterationsProp.intValue;
-        maxIterationsProp.intValue = EditorGUILayout.IntSlider(maxIterationsProp.intValue, 1, 10);
-
-        // Draw visualization of BSP iterations
-        Rect iterationBar = EditorGUILayout.GetControlRect(false, 20);
-        int iterations = maxIterationsProp.intValue;
-        float segmentWidth = iterationBar.width / 10f;
-
-        // Draw segments
-        for (int i = 0; i < 10; i++)
-        {
-            Rect segment = new Rect(iterationBar.x + (i * segmentWidth), iterationBar.y, segmentWidth - 2, iterationBar.height);
-
-            // Active segments with pulse
-            if (i < iterations)
-            {
-                float segmentPulse = 0.8f + 0.2f * Mathf.Sin(pulseTime + i * 0.3f); // Offset each segment
-                Color segmentColor = new Color(accentColor.r * segmentPulse, accentColor.g * segmentPulse, accentColor.b);
-                EditorGUI.DrawRect(segment, segmentColor);
-            }
-            // Inactive segments
-            else
-            {
-                EditorGUI.DrawRect(segment, new Color(0.3f, 0.3f, 0.3f));
-            }
-        }
-
-        // Give visual feedback when iterations change
-        if (oldValue != maxIterationsProp.intValue && Event.current.type == EventType.Used)
-        {
-            if (maxIterationsProp.intValue > oldValue)
-            {
-                ShowFeedback("More iterations = smaller, more numerous rooms", MessageType.Info);
-            }
-            else
-            {
-                ShowFeedback("Fewer iterations = larger, fewer rooms", MessageType.Info);
-            }
-        }
-
-        EditorGUILayout.EndVertical();
-        EditorGUILayout.EndHorizontal();
-
-        // Room Padding with visual slider
-        EditorGUILayout.Slider(roomPaddingProp, 0, 5, new GUIContent("Room Padding"));
-
-        EditorGUILayout.Space(5);
-    }
-
-    private void DrawHybridSection()
-    {
-        EditorGUILayout.Space(5);
-
-        // Room type probabilities with visual distribution
-        float lProb = lShapeProbabilityProp.floatValue;
-        float templateProb = roomTemplateProbabilityProp.floatValue;
-        float rectProb = 1f - lProb - templateProb;
-
-        EditorGUILayout.Slider(lShapeProbabilityProp, 0f, 1f, new GUIContent("L-Shape Probability"));
-        EditorGUILayout.Slider(roomTemplateProbabilityProp, 0f, 1f, new GUIContent("Template Probability"));
-
-        // Recalculate after potential changes
-        lProb = lShapeProbabilityProp.floatValue;
-        templateProb = roomTemplateProbabilityProp.floatValue;
-        rectProb = 1f - lProb - templateProb;
-
-        // Warning if probabilities exceed 100%
-        if (rectProb < 0)
-        {
-            EditorGUILayout.HelpBox("Warning: Probabilities exceed 100%! Rectangle probability will be 0%.", MessageType.Warning);
-            rectProb = 0f;
-        }
-
-        // Visual distribution bar
-        Rect distributionRect = EditorGUILayout.GetControlRect(false, 25);
-        float totalWidth = distributionRect.width;
-
-        // Calculate widths
-        // Calculate widths
-        float lWidth = totalWidth * lProb;
-        float templateWidth = totalWidth * templateProb;
-        float rectWidth = totalWidth * rectProb;
-
-        // Draw distribution segments with pulsing effect
-        float lPulse = 0.8f + 0.2f * Mathf.Sin(pulseTime);
-        float tPulse = 0.8f + 0.2f * Mathf.Sin(pulseTime + 2.0f);
-        float rPulse = 0.8f + 0.2f * Mathf.Sin(pulseTime + 4.0f);
-
-        // L-shape segment
-        Rect lRect = new Rect(distributionRect.x, distributionRect.y, lWidth, distributionRect.height);
-        EditorGUI.DrawRect(lRect, new Color(0.9f * lPulse, 0.6f * lPulse, 0.3f * lPulse));
-
-        // Template segment
-        Rect templateRect = new Rect(distributionRect.x + lWidth, distributionRect.y, templateWidth, distributionRect.height);
-        EditorGUI.DrawRect(templateRect, new Color(0.3f * tPulse, 0.6f * tPulse, 0.9f * tPulse));
-
-        // Rectangle segment
-        Rect rectRect = new Rect(distributionRect.x + lWidth + templateWidth, distributionRect.y, rectWidth, distributionRect.height);
-        EditorGUI.DrawRect(rectRect, new Color(0.6f * rPulse, 0.4f * rPulse, 0.8f * rPulse));
-
-        // Labels
-        EditorGUILayout.BeginHorizontal();
-        GUIStyle smallLabel = new GUIStyle(EditorStyles.miniLabel) { alignment = TextAnchor.MiddleCenter };
-
-        if (lProb > 0.1f)
-            GUILayout.Label("L-Shapes", smallLabel, GUILayout.Width(lWidth));
-        if (templateProb > 0.1f)
-            GUILayout.Label("Templates", smallLabel, GUILayout.Width(templateWidth));
-        if (rectProb > 0.1f)
-            GUILayout.Label("Rectangles", smallLabel, GUILayout.Width(rectWidth));
-
-        EditorGUILayout.EndHorizontal();
-
-        EditorGUILayout.Space(8);
-
-        // L-Shape Settings
-        EditorGUILayout.LabelField("L-Shape Settings", EditorStyles.boldLabel);
-
-        // Min Leg Ratio with visual representation
-        EditorGUILayout.Slider(minLLegRatioProp, 0.2f, 0.8f, new GUIContent("Min Leg Ratio"));
-
-        // Ensure max leg ratio is at least min leg ratio
-        maxLLegRatioProp.floatValue = Mathf.Max(maxLLegRatioProp.floatValue, minLLegRatioProp.floatValue);
-        EditorGUILayout.Slider(maxLLegRatioProp, minLLegRatioProp.floatValue, 0.8f, new GUIContent("Max Leg Ratio"));
-
-        // L-shape visualization with animation
-        float legRatio = (minLLegRatioProp.floatValue + maxLLegRatioProp.floatValue) / 2f;
-        EditorGUILayout.Space(5);
-
-        Rect lShapeRect = EditorGUILayout.GetControlRect(false, 80);
-        float size = Mathf.Min(lShapeRect.width, lShapeRect.height) * 0.8f;
-        float padding = 10;
-        float centerX = lShapeRect.x + (lShapeRect.width - size) / 2;
-        float centerY = lShapeRect.y + (lShapeRect.height - size) / 2;
-
-        // Vertical leg width & height with animation
-        float pulseRatio = legRatio * (0.9f + 0.1f * Mathf.Sin(pulseTime));
-        float vertLegWidth = size * pulseRatio;
-        float vertLegHeight = size;
-
-        // Horizontal leg width & height with animation
-        float horizLegWidth = size;
-        float horizLegHeight = size * pulseRatio;
-
-        // Draw L-shape
-        Rect vertLeg = new Rect(
-            centerX,
-            centerY,
-            vertLegWidth,
-            vertLegHeight
-        );
-
-        Rect horizLeg = new Rect(
-            centerX,
-            centerY + (vertLegHeight - horizLegHeight),
-            horizLegWidth,
-            horizLegHeight
-        );
-
-        EditorGUI.DrawRect(vertLeg, accentColor);
-        EditorGUI.DrawRect(horizLeg, accentColor);
-
-        EditorGUILayout.Space(8);
-
-        // Room Templates
-        EditorGUILayout.LabelField("Room Templates", EditorStyles.boldLabel);
-
-        EditorGUILayout.HelpBox("Add prefabs that will be used as room templates. Templates should have a RoomTemplate component attached.", MessageType.Info);
-
-        EditorGUI.BeginChangeCheck();
-        EditorGUILayout.PropertyField(roomTemplatePrefabsProp, true);
-
-        if (EditorGUI.EndChangeCheck())
-        {
-            ShowFeedback("Room templates updated", MessageType.Info);
-        }
-    }
-
-    private void DrawCorridorSection()
-    {
-        EditorGUILayout.Space(5);
-
-        EditorGUI.BeginChangeCheck();
-        int oldCorridorWidth = corridorWidthProp.intValue;
-        EditorGUILayout.IntSlider(corridorWidthProp, 1, 5, new GUIContent("Corridor Width"));
-
-        // Visual corridor width preview
-        Rect corridorPreviewArea = EditorGUILayout.GetControlRect(false, 40);
-        float corridorPreviewWidth = corridorPreviewArea.width - 20;
-
-        // Animated corridor
-        float pulseWidth = 1.0f + 0.05f * Mathf.Sin(pulseTime * 2);
-
-        Rect corridorVisual = new Rect(
-            corridorPreviewArea.x + 10,
-            corridorPreviewArea.y + (corridorPreviewArea.height - corridorWidthProp.intValue * 5 * pulseWidth) / 2,
-            corridorPreviewWidth,
-            corridorWidthProp.intValue * 5 * pulseWidth  // Scale for visibility with pulse
-        );
-
-        EditorGUI.DrawRect(corridorVisual, accentColor);
-
-        if (EditorGUI.EndChangeCheck() && oldCorridorWidth != corridorWidthProp.intValue)
-        {
-            ShowFeedback($"Corridor width set to {corridorWidthProp.intValue}", MessageType.Info);
-        }
-    }
-
-    private void DrawTilemapSection()
-    {
-        EditorGUILayout.Space(5);
-
-        EditorGUI.BeginChangeCheck();
-
-        // Ground tilemap with icon
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Label(EditorGUIUtility.IconContent("Tilemap Icon"), GUILayout.Width(20), GUILayout.Height(20));
-        EditorGUILayout.PropertyField(groundTilemapProp, new GUIContent("Ground Tilemap"));
-        EditorGUILayout.EndHorizontal();
-
-        // Wall tilemap with icon
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Label(EditorGUIUtility.IconContent("Tilemap Icon"), GUILayout.Width(20), GUILayout.Height(20));
-        EditorGUILayout.PropertyField(wallTilemapProp, new GUIContent("Wall Tilemap"));
-        EditorGUILayout.EndHorizontal();
-
-        EditorGUILayout.Space(8);
-
-        // Floor tile with color preview
-        EditorGUILayout.BeginHorizontal();
-        Rect floorColorRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight, GUILayout.Width(20));
-        EditorGUI.DrawRect(floorColorRect, new Color(0.2f, 0.8f, 0.3f));
-        EditorGUILayout.PropertyField(floorTileProp, new GUIContent("Floor Tile"));
-        EditorGUILayout.EndHorizontal();
-
-        // Wall tile with color preview
-        EditorGUILayout.BeginHorizontal();
-        Rect wallColorRect = EditorGUILayout.GetControlRect(false, EditorGUIUtility.singleLineHeight, GUILayout.Width(20));
-        EditorGUI.DrawRect(wallColorRect, new Color(0.8f, 0.4f, 0.3f));
-        EditorGUILayout.PropertyField(wallTileProp, new GUIContent("Wall Tile"));
-        EditorGUILayout.EndHorizontal();
-
-        if (EditorGUI.EndChangeCheck())
-        {
-            ShowFeedback("Tile references updated", MessageType.Info);
-        }
-    }
-
-    private void DrawEntitySection()
-    {
-        EditorGUILayout.Space(5);
-
-        // Player settings
-        EditorGUILayout.LabelField("Player Settings", EditorStyles.boldLabel);
-
-        EditorGUI.BeginChangeCheck();
-
-        // Player prefab with icon
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Label(EditorGUIUtility.IconContent("d_AnimatorController Icon"), GUILayout.Width(20), GUILayout.Height(20));
-        EditorGUILayout.PropertyField(playerPrefabProp, new GUIContent("Player Prefab"));
-        EditorGUILayout.EndHorizontal();
-
-        if (EditorGUI.EndChangeCheck())
-        {
-            if (playerPrefabProp.objectReferenceValue != null)
-            {
-                ShowFeedback("Player prefab set", MessageType.Info);
-            }
-            else
-            {
-                ShowFeedback("Player prefab removed", MessageType.Warning);
-            }
-        }
-
-        EditorGUILayout.Space(10);
-
-        // Enemy settings
-        EditorGUILayout.LabelField("Enemy Settings", EditorStyles.boldLabel);
-
-        EditorGUI.BeginChangeCheck();
-
-        // Enemy prefab with icon
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Label(EditorGUIUtility.IconContent("d_PreMatCube"), GUILayout.Width(20), GUILayout.Height(20));
-        EditorGUILayout.PropertyField(enemyPrefabProp, new GUIContent("Enemy Prefab"));
-        EditorGUILayout.EndHorizontal();
-
-        // Enemy count per room with visual feedback
-        int oldEnemyCount = enemiesPerRoomProp.intValue;
-
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.PrefixLabel("Enemies Per Room");
-        enemiesPerRoomProp.intValue = EditorGUILayout.IntSlider(enemiesPerRoomProp.intValue, 0, 10);
-        EditorGUILayout.EndHorizontal();
-
-        // Visual enemy count indicator with animation
-        if (enemyPrefabProp.objectReferenceValue != null && enemiesPerRoomProp.intValue > 0)
-        {
-            Rect enemyVisRect = EditorGUILayout.GetControlRect(false, 30);
-            float iconWidth = 15f;
-            float spacing = 5f;
-            float totalWidth = enemiesPerRoomProp.intValue * (iconWidth + spacing);
-            float startX = enemyVisRect.x + (enemyVisRect.width - totalWidth) / 2;
-
-            for (int i = 0; i < enemiesPerRoomProp.intValue; i++)
-            {
-                // Animated pulse offset by icon index
-                float pulse = 0.8f + 0.2f * Mathf.Sin(pulseTime + i * 0.3f);
-
-                Rect enemyRect = new Rect(
-                    startX + (i * (iconWidth + spacing)),
-                    enemyVisRect.y + (enemyVisRect.height - iconWidth) / 2,
-                    iconWidth,
-                    iconWidth
-                );
-
-                EditorGUI.DrawRect(enemyRect, new Color(0.85f * pulse, 0.3f, 0.3f));
-            }
-        }
-
-        if (EditorGUI.EndChangeCheck())
-        {
-            if (enemiesPerRoomProp.intValue != oldEnemyCount)
-            {
-                ShowFeedback($"Enemy count set to {enemiesPerRoomProp.intValue} per room", MessageType.Info);
-            }
-        }
-
-        EditorGUILayout.Space(10);
-
-        // Decoration settings
-        EditorGUILayout.LabelField("Decoration Settings", EditorStyles.boldLabel);
-
-        EditorGUI.BeginChangeCheck();
-
-        // Decoration prefab with icon
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.Label(EditorGUIUtility.IconContent("d_TerrainInspector.TerrainToolSplat"), GUILayout.Width(20), GUILayout.Height(20));
-        EditorGUILayout.PropertyField(decorationPrefabProp, new GUIContent("Decoration Prefab"));
-        EditorGUILayout.EndHorizontal();
-
-        // Decoration count per room with visual feedback
-        int oldDecorCount = decorationsPerRoomProp.intValue;
-
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.PrefixLabel("Decorations Per Room");
-        decorationsPerRoomProp.intValue = EditorGUILayout.IntSlider(decorationsPerRoomProp.intValue, 0, 15);
-        EditorGUILayout.EndHorizontal();
-
-        // Visual decoration count indicator with animation
-        if (decorationPrefabProp.objectReferenceValue != null && decorationsPerRoomProp.intValue > 0)
-        {
-            Rect decorVisRect = EditorGUILayout.GetControlRect(false, 30);
-            float iconWidth = 12f;
-            float spacing = 4f;
-            float totalWidth = decorationsPerRoomProp.intValue * (iconWidth + spacing);
-            float startX = decorVisRect.x + (decorVisRect.width - totalWidth) / 2;
-
-            for (int i = 0; i < decorationsPerRoomProp.intValue; i++)
-            {
-                // Animated pulse with different offsets for different types
-                float pulse = 0.8f + 0.2f * Mathf.Sin(pulseTime + i * 0.2f);
-
-                Rect decorRect = new Rect(
-                    startX + (i * (iconWidth + spacing)),
-                    decorVisRect.y + (decorVisRect.height - iconWidth) / 2,
-                    iconWidth,
-                    iconWidth
-                );
-
-                // Alternate decoration colors
-                Color decorColor = (i % 3 == 0) ?
-                    new Color(0.3f, 0.7f * pulse, 0.3f) :
-                    (i % 3 == 1) ?
-                        new Color(0.3f, 0.6f, 0.8f * pulse) :
-                        new Color(0.8f * pulse, 0.7f, 0.3f);
-
-                EditorGUI.DrawRect(decorRect, decorColor);
-            }
-        }
-
-        if (EditorGUI.EndChangeCheck())
-        {
-            if (decorationsPerRoomProp.intValue != oldDecorCount)
-            {
-                ShowFeedback($"Decoration count set to {decorationsPerRoomProp.intValue} per room", MessageType.Info);
-            }
-        }
-    }
-
-    private void MarkSceneDirty(HybridLevelGenerator generator)
-    {
-        if (!Application.isPlaying && generator != null && generator.gameObject != null)
-        {
-            try
-            {
-                if (generator.gameObject.scene.IsValid())
-                {
-                    UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene);
-                }
-            }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"Could not mark scene dirty: {e.Message}");
-            }
-        }
-    }
-}
+} // --- End of HybridLevelGeneratorEditor Class ---
