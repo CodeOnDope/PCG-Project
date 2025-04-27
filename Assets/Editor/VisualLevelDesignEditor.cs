@@ -172,7 +172,7 @@ public class VisualLevelDesignEditor : EditorWindow
     private bool snapToGrid = true;
     private float gridSnapSize = 10f;
     private GUIContent helpContent;
-    private Vector2 globalNodeVisualSize = new Vector2(45f, 45f);
+    private Vector2 globalNodeVisualSize = new Vector2(15f, 15f);
     private Color globalNodeColor = Color.gray;
     private bool useNodeTypeColor = true;
     private bool hasUnsavedChanges = false;
@@ -242,7 +242,7 @@ public class VisualLevelDesignEditor : EditorWindow
         zoom = Mathf.Min(zoomX, zoomY);
 
         // Ensure zoom is within reasonable bounds
-        zoom = Mathf.Clamp(zoom, 0.2f, 2.0f);
+        zoom = Mathf.Clamp(zoom, 0.2f, 15.0f);
 
         // Center the view on origin
         Vector2 screenCenter = graphViewRect.size / 2f;
