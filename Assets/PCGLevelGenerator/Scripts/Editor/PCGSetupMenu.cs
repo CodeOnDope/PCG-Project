@@ -28,7 +28,7 @@ namespace PCGLevelGenerator
                 if (existingGenerator != null) Object.DestroyImmediate(existingGenerator);
             }
 
-            // --- Create Grid with exactly three Tilemaps (as shown in your new screenshot) ---
+            // --- Create Grid with exactly three Tilemaps ---
             GameObject gridObject = new GameObject("Grid");
             Grid grid = gridObject.AddComponent<Grid>();
             grid.cellSize = new Vector3(1, 1, 0);
@@ -48,8 +48,6 @@ namespace PCGLevelGenerator
             CreateHolderObject(generatorObject, "DecorationsHolder");
 
             // --- Assign references to the generator ---
-
-            // Assign tilemaps
             generator.groundTilemap = groundTilemap;
             generator.wallTilemap = wallTilemap;
 
@@ -70,12 +68,12 @@ namespace PCGLevelGenerator
             generator.levelWidth = 100;
             generator.levelHeight = 100;
             generator.corridorWidth = 2;
-            generator.roomPadding = 2.37f; // As shown in your screenshot
+            generator.roomPadding = 2.37f;
 
-            // Select the generator in the hierarchy to show its Inspector
+            // Select the generator in the hierarchy
             Selection.activeGameObject = generatorObject;
 
-            // Display success message with next steps
+            // Show the setup complete dialog using EditorUtility.DisplayDialog instead
             EditorUtility.DisplayDialog("PCG Level Generator Setup Complete",
                 "The PCG Level Generator has been successfully set up in your scene!\n\n" +
                 "Next Steps:\n" +
@@ -85,8 +83,10 @@ namespace PCGLevelGenerator
                 "Got it!");
         }
 
+        // Keep your existing methods here...
         private static Tilemap CreateTilemap(GameObject parent, string name, int sortingOrder, string sortingLayer = "Default")
         {
+            // Your existing code
             GameObject tilemapObject = new GameObject(name);
             tilemapObject.transform.SetParent(parent.transform);
 
@@ -113,6 +113,7 @@ namespace PCGLevelGenerator
 
         private static GameObject CreateHolderObject(GameObject parent, string name)
         {
+            // Your existing code
             GameObject holder = new GameObject(name);
             holder.transform.SetParent(parent.transform);
             holder.transform.localPosition = Vector3.zero;
@@ -121,6 +122,7 @@ namespace PCGLevelGenerator
 
         private static void AssignPrefabs(HybridLevelGenerator generator)
         {
+            // Your existing AssignPrefabs method
             // Auto-assign prefabs from the PCGLevelGenerator/Prefabs folder
             string prefabsPath = "Assets/PCGLevelGenerator/Prefabs";
 
@@ -168,6 +170,7 @@ namespace PCGLevelGenerator
 
         private static GameObject FindPrefab(string basePath, string prefabName)
         {
+            // Your existing FindPrefab method
             string[] guids = AssetDatabase.FindAssets("t:GameObject " + prefabName);
 
             foreach (string guid in guids)
@@ -197,6 +200,7 @@ namespace PCGLevelGenerator
 
         private static TileBase FindDefaultTile(string tileType)
         {
+            // Your existing FindDefaultTile method
             // First look in our own package
             string packagePath = "Assets/PCGLevelGenerator/Tiles/";
             if (Directory.Exists(packagePath))
@@ -229,7 +233,7 @@ namespace PCGLevelGenerator
         }
     }
 
-    // Auto-show welcome window on import
+    // Auto-show welcome window on import (keep this part)
     [InitializeOnLoad]
     public class PCGLevelGeneratorImportHandler
     {
@@ -249,10 +253,11 @@ namespace PCGLevelGenerator
         }
     }
 
-    // Welcome window that appears on first import
+    // Simplified welcome window that should work without errors
     public class PCGLevelGeneratorWelcome : EditorWindow
     {
-        private Texture2D headerImage;
+        // Hold reference to the texture but don't use it in OnEnable
+        private Texture2D headerTexture;
 
         public static void ShowWindow()
         {
@@ -261,88 +266,74 @@ namespace PCGLevelGenerator
             window.Show();
         }
 
-        void OnEnable()
-        {
-            // Try to load header image
-            headerImage = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                "Assets/PCGLevelGenerator/Editor/Resources/PCGHeader.png");
-        }
-
         void OnGUI()
         {
+            // Load the texture during OnGUI if needed (not in OnEnable)
+            if (headerTexture == null)
+            {
+                headerTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                    "Assets/PCGLevelGenerator/Editor/Resources/PCGHeader.png");
+            }
+
+            // Simple layout using EditorGUILayout
             EditorGUILayout.BeginVertical();
-
-            // Header
-            if (headerImage != null)
-            {
-                GUILayout.Label(headerImage, GUILayout.Width(450), GUILayout.Height(100));
-            }
-            else
-            {
-                GUILayout.Space(20);
-
-                GUIStyle titleStyle = new GUIStyle(EditorStyles.largeLabel);
-                titleStyle.fontSize = 22;
-                titleStyle.alignment = TextAnchor.MiddleCenter;
-                titleStyle.fontStyle = FontStyle.Bold;
-
-                GUILayout.Label("PCG Level Generator", titleStyle);
-                GUILayout.Space(10);
-            }
+            
+            // Simplified dark header area
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            GUILayout.Space(10);
+            
+            // Title
+            GUILayout.Label("PCG Level Generator", EditorStyles.boldLabel);
+            
+            GUILayout.Label("Developed by Dineshkumar & Kamalanathan", EditorStyles.centeredGreyMiniLabel);
+            GUILayout.Space(10);
+            EditorGUILayout.EndVertical();
 
             GUILayout.Space(20);
 
+            // Info box
             EditorGUILayout.HelpBox(
                 "Welcome to PCG Level Generator!\n\n" +
                 "This asset provides three powerful ways to create procedural 2D levels:\n" +
-                "� Fully Procedural: Classic BSP dungeons\n" +
-                "� Hybrid Procedural: Mixing auto-generation with custom templates\n" +
-                "� User Defined Layout: Design your levels visually",
+                "• Fully Procedural: Classic BSP dungeons\n" +
+                "• Hybrid Procedural: Mixing auto-generation with custom templates\n" +
+                "• User Defined Layout: Design your levels visually",
                 MessageType.Info);
 
             GUILayout.Space(20);
 
-            GUIStyle buttonStyle = new GUIStyle(GUI.skin.button);
-            buttonStyle.fontSize = 14;
-            buttonStyle.padding = new RectOffset(10, 10, 10, 10);
-
-            if (GUILayout.Button("ONE-CLICK SETUP (READY IN 10 SECONDS!)", buttonStyle, GUILayout.Height(50)))
+            // Setup button
+            if (GUILayout.Button("ONE-CLICK SETUP (READY IN 10 SECONDS!)", GUILayout.Height(40)))
             {
                 PCGSetupMenu.SetupCompletePCGSystem();
                 Close();
             }
 
-            GUILayout.Space(15);
+            GUILayout.Space(10);
 
+            // Info text
             EditorGUILayout.HelpBox(
-                "This will set up a complete PCG Level Generator system with all required components in your scene, " +
-                "exactly matching the configuration shown in the documentation.",
+                "This will set up a complete PCG Level Generator system with all required components in your scene.",
                 MessageType.None);
 
-            GUILayout.Space(20);
+            GUILayout.Space(15);
 
+            // Designer button
             if (GUILayout.Button("Open Visual Level Designer", GUILayout.Height(30)))
             {
-                // Open the visual designer window
                 EditorApplication.ExecuteMenuItem("Window/Visual Level Designer");
                 Close();
             }
 
             GUILayout.FlexibleSpace();
 
+            // Footer
             GUILayout.Label("You can access these tools anytime via the Tools > PCG Level Generator menu",
+                EditorStyles.centeredGreyMiniLabel);
+            GUILayout.Label("© 2025 Dineshkumar & Kamalanathan. All rights reserved.",
                 EditorStyles.centeredGreyMiniLabel);
 
             GUILayout.Space(10);
-
-             GUILayout.FlexibleSpace();
-    
-    // Footer with copyright
-    GUILayout.Label("© 2025 Dineshkumar & Kamalanathan. All rights reserved.", 
-        EditorStyles.centeredGreyMiniLabel);
-    
-    GUILayout.Space(10);
-
             EditorGUILayout.EndVertical();
         }
 
