@@ -5,6 +5,18 @@ using System;
 using System.Linq;
 using UnityEngine.Tilemaps; // Needed for Tilemap checks
 
+// ██████╗  ██████╗  ██████╗    ██╗     ███████╗██╗   ██╗███████╗██╗         ██████╗ ███████╗███╗   ██╗
+// ██╔══██╗██╔════╝ ██╔════╝    ██║     ██╔════╝██║   ██║██╔════╝██║        ██╔════╝ ██╔════╝████╗  ██║
+// ██████╔╝██║      ██║  ███╗   ██║     █████╗  ██║   ██║█████╗  ██║        ██║  ███╗█████╗  ██╔██╗ ██║
+// ██╔═══╝ ██║      ██║   ██║   ██║     ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║██╔══╝  ██║╚██╗██║
+// ██║     ╚██████╗ ╚██████╔╝   ███████╗███████╗ ╚████╔╝ ███████╗███████╗   ╚██████╔╝███████╗██║ ╚████║
+// ╚═╝      ╚═════╝  ╚═════╝    ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝    ╚═════╝ ╚══════╝╚═╝  ╚═══╝
+//
+// PCG Level Generator for Unity
+// Copyright (c) 2025 Dineshkumar & Kamalanathan
+// Version: 1.0.0
+
+
 // Assumes GenerationMode enum is defined in LevelGenerationTypes.cs or similar
 [CustomEditor(typeof(HybridLevelGenerator))]
 public class HybridLevelGeneratorEditor : Editor

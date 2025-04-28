@@ -1,9 +1,20 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 
 // --- Enums (Accessible by Runtime & Editor) ---
 
 // Mode Selection for the generator
+
+// ██████╗  ██████╗  ██████╗    ██╗     ███████╗██╗   ██╗███████╗██╗         ██████╗ ███████╗███╗   ██╗
+// ██╔══██╗██╔════╝ ██╔════╝    ██║     ██╔════╝██║   ██║██╔════╝██║        ██╔════╝ ██╔════╝████╗  ██║
+// ██████╔╝██║      ██║  ███╗   ██║     █████╗  ██║   ██║█████╗  ██║        ██║  ███╗█████╗  ██╔██╗ ██║
+// ██╔═══╝ ██║      ██║   ██║   ██║     ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║██╔══╝  ██║╚██╗██║
+// ██║     ╚██████╗ ╚██████╔╝   ███████╗███████╗ ╚████╔╝ ███████╗███████╗   ╚██████╔╝███████╗██║ ╚████║
+// ╚═╝      ╚═════╝  ╚═════╝    ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝    ╚═════╝ ╚══════╝╚═╝  ╚═══╝
+//
+// PCG Level Generator for Unity
+// Copyright (c) 2025 Dineshkumar & Kamalanathan
+// Version: 1.0.0
 public enum GenerationMode
 {
     FullyProcedural,  // BSP splits, random Rect rooms, procedural corridors

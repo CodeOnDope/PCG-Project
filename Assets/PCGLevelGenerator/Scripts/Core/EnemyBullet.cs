@@ -1,8 +1,19 @@
-using UnityEngine;
+﻿using UnityEngine;
 public class EnemyBullet : MonoBehaviour {
     public float speed = 10f;
     public float lifetime = 3f;
     public int damage = 10; // Damage this bullet deals
+
+    // ██████╗  ██████╗  ██████╗    ██╗     ███████╗██╗   ██╗███████╗██╗         ██████╗ ███████╗███╗   ██╗
+    // ██╔══██╗██╔════╝ ██╔════╝    ██║     ██╔════╝██║   ██║██╔════╝██║        ██╔════╝ ██╔════╝████╗  ██║
+    // ██████╔╝██║      ██║  ███╗   ██║     █████╗  ██║   ██║█████╗  ██║        ██║  ███╗█████╗  ██╔██╗ ██║
+    // ██╔═══╝ ██║      ██║   ██║   ██║     ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║██╔══╝  ██║╚██╗██║
+    // ██║     ╚██████╗ ╚██████╔╝   ███████╗███████╗ ╚████╔╝ ███████╗███████╗   ╚██████╔╝███████╗██║ ╚████║
+    // ╚═╝      ╚═════╝  ╚═════╝    ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝    ╚═════╝ ╚══════╝╚═╝  ╚═══╝
+    //
+    // PCG Level Generator for Unity
+    // Copyright (c) 2025 Dineshkumar & Kamalanathan
+    // Version: 1.0.0
 
     void Start() {
         // Destroy the bullet after its lifetime expires

@@ -1,7 +1,18 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.Tilemaps; // Keep for potential future use in OnValidate
 using System.Collections.Generic;
 using System;
+
+// ██████╗  ██████╗  ██████╗    ██╗     ███████╗██╗   ██╗███████╗██╗         ██████╗ ███████╗███╗   ██╗
+// ██╔══██╗██╔════╝ ██╔════╝    ██║     ██╔════╝██║   ██║██╔════╝██║        ██╔════╝ ██╔════╝████╗  ██║
+// ██████╔╝██║      ██║  ███╗   ██║     █████╗  ██║   ██║█████╗  ██║        ██║  ███╗█████╗  ██╔██╗ ██║
+// ██╔═══╝ ██║      ██║   ██║   ██║     ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║██╔══╝  ██║╚██╗██║
+// ██║     ╚██████╗ ╚██████╔╝   ███████╗███████╗ ╚████╔╝ ███████╗███████╗   ╚██████╔╝███████╗██║ ╚████║
+// ╚═╝      ╚═════╝  ╚═════╝    ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝    ╚═════╝ ╚══════╝╚═╝  ╚═══╝
+//
+// PCG Level Generator for Unity
+// Copyright (c) 2025 Dineshkumar & Kamalanathan
+// Version: 1.0.0
 
 // Assumes NodeType is defined in LevelGenerationTypes.cs or similar
 // public enum NodeType { Rect, LShape, Template } // Example if not defined elsewhere
