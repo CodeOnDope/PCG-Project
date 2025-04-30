@@ -27,9 +27,9 @@ public class HybridLevelGenerator : MonoBehaviour
 
     [Header("Level Dimensions (Max Bounds)")]
     [Tooltip("Maximum width of the generation grid.")]
-    [Range(10, 500)] public int levelWidth = 100;
+    [Range(10, 500)] public int levelWidth = 50;
     [Tooltip("Maximum height of the generation grid.")]
-    [Range(10, 500)] public int levelHeight = 100;
+    [Range(10, 500)] public int levelHeight = 50;
 
     [Header("BSP Settings (Procedural & Hybrid Modes)")]
     [Tooltip("Minimum width or height for BSP partitions and generated rectangular rooms.")]

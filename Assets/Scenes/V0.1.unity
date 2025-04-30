@@ -41417,7 +41417,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d94a319dab8d3284d983c4def114753e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  generationMode: 0
+  generationMode: 2
   levelWidth: 50
   levelHeight: 50
   minRoomSize: 8
@@ -41478,7 +41478,7 @@ MonoBehaviour:
   floorTileVariants: []
   wallTileVariants: []
   variantTileChance: 0.4
-  seed: 1694826204
+  seed: 1695721624
   useRandomSeed: 1
   playerPrefab: {fileID: 3548798236488958899, guid: 233e123314ae4e948bcc465afc76dfb9, type: 3}
   enemyPrefab: {fileID: 7773039407867173279, guid: a722c0378e102014a9dfbe64ebc335bf, type: 3}
