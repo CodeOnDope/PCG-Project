@@ -38,6 +38,9 @@ public class HybridLevelGeneratorEditor : Editor
     SerializedProperty wallTilemapProp;
     SerializedProperty floorTileProp;
     SerializedProperty wallTileProp;
+    SerializedProperty floorTileVariantsProp;
+    SerializedProperty wallTileVariantsProp;
+    SerializedProperty variantTileChanceProp;
     SerializedProperty seedProp;
     SerializedProperty useRandomSeedProp;
     SerializedProperty playerPrefabProp;
@@ -46,6 +49,26 @@ public class HybridLevelGeneratorEditor : Editor
     SerializedProperty enemiesPerRoomProp;
     SerializedProperty decorationsPerRoomProp;
     SerializedProperty defaultSceneNodeSizeProp;
+
+    // Updated directional wall tile properties - matched to sprite numbers
+    SerializedProperty useDirectionalWallsProp;
+    // Basic Wall Directions (1-4)
+    SerializedProperty wallTileBottomProp; // Sprite #1
+    SerializedProperty wallTileTopProp;    // Sprite #2
+    SerializedProperty wallTileRightProp;  // Sprite #3
+    SerializedProperty wallTileLeftProp;   // Sprite #4
+
+    // Inner corner tiles (5-8)
+    SerializedProperty wallTileInnerTopLeftProp;     // Sprite #5
+    SerializedProperty wallTileInnerTopRightProp;    // Sprite #6
+    SerializedProperty wallTileInnerBottomLeftProp;  // Sprite #7
+    SerializedProperty wallTileInnerBottomRightProp; // Sprite #8
+
+    // Outer corner tiles (9-12)
+    SerializedProperty wallTileOuterTopLeftProp;     // Sprite #9
+    SerializedProperty wallTileOuterTopRightProp;    // Sprite #10
+    SerializedProperty wallTileOuterBottomLeftProp;  // Sprite #11
+    SerializedProperty wallTileOuterBottomRightProp; // Sprite #12
 
     // --- UI States ---
     private bool showFeedback = false;
@@ -124,11 +147,11 @@ public class HybridLevelGeneratorEditor : Editor
     }
 
     private string GetModeTooltip(GenerationMode mode)
-    { /* (Same as before) */
+    {
         switch (mode)
         {
             case GenerationMode.FullyProcedural: return "Generates level using BSP partitions, rectangular rooms, and MST corridors.";
-            case GenerationMode.HybridProcedural: return "Generates level using BSP, mixing Rectangles, L-Shapes, and Room Templates.";
+            case GenerationMode.HybridProcedural: return "Generates level using BSP, mixing Rectangles, L-Shapes, and Room Templates + MST corridors.\nOffers more variety.";
             case GenerationMode.UserDefinedLayout: return "Generates level based on RoomNode components placed manually in the scene via the Visual Level Designer.";
             default: return "";
         }
@@ -161,6 +184,32 @@ public class HybridLevelGeneratorEditor : Editor
         decorationsPerRoomProp = serializedObject.FindProperty("decorationsPerRoom");
         defaultSceneNodeSizeProp = serializedObject.FindProperty("defaultSceneNodeSize");
 
+        // Update these property findings for directional wall tiles with rotation
+        useDirectionalWallsProp = serializedObject.FindProperty("useDirectionalWalls");
+
+        // Basic Wall Directions - matching sprite numbers 1-4
+        wallTileBottomProp = serializedObject.FindProperty("wallTileBottom"); // Sprite #1
+        wallTileTopProp = serializedObject.FindProperty("wallTileTop");       // Sprite #2
+        wallTileRightProp = serializedObject.FindProperty("wallTileRight");   // Sprite #3
+        wallTileLeftProp = serializedObject.FindProperty("wallTileLeft");     // Sprite #4
+
+        // Inner corner tiles - matching sprite numbers 5-8
+        wallTileInnerTopLeftProp = serializedObject.FindProperty("wallTileInnerTopLeft");         // Sprite #5
+        wallTileInnerTopRightProp = serializedObject.FindProperty("wallTileInnerTopRight");       // Sprite #6
+        wallTileInnerBottomLeftProp = serializedObject.FindProperty("wallTileInnerBottomLeft");   // Sprite #7
+        wallTileInnerBottomRightProp = serializedObject.FindProperty("wallTileInnerBottomRight"); // Sprite #8
+
+        // Outer corner tiles - matching sprite numbers 9-12
+        wallTileOuterTopLeftProp = serializedObject.FindProperty("wallTileOuterTopLeft");         // Sprite #9
+        wallTileOuterTopRightProp = serializedObject.FindProperty("wallTileOuterTopRight");       // Sprite #10
+        wallTileOuterBottomLeftProp = serializedObject.FindProperty("wallTileOuterBottomLeft");   // Sprite #11
+        wallTileOuterBottomRightProp = serializedObject.FindProperty("wallTileOuterBottomRight"); // Sprite #12
+
+        // Add the new tile variant properties
+        floorTileVariantsProp = serializedObject.FindProperty("floorTileVariants");
+        wallTileVariantsProp = serializedObject.FindProperty("wallTileVariants");
+        variantTileChanceProp = serializedObject.FindProperty("variantTileChance");
+
         stylesInitialized = false; // Reinitialize styles
 
         EditorApplication.update -= OnEditorUpdate;
@@ -170,7 +219,7 @@ public class HybridLevelGeneratorEditor : Editor
     private void OnDisable() { EditorApplication.update -= OnEditorUpdate; }
 
     private void OnEditorUpdate()
-    { /* (Same as before) */
+    {
         bool needsRepaint = false;
         pulseTime = (float)(EditorApplication.timeSinceStartup * 2.5) % (2f * Mathf.PI);
         UpdateFoldoutAnimation("dimensions", showLevelDimensions, ref needsRepaint);
@@ -182,18 +231,37 @@ public class HybridLevelGeneratorEditor : Editor
         if (showFeedback && EditorApplication.timeSinceStartup > feedbackExpireTime) { showFeedback = false; needsRepaint = true; }
         if (needsRepaint) Repaint();
     }
+
     private void UpdateFoldoutAnimation(string key, bool targetState, ref bool needsRepaint)
-    { /* (Same as before) */
-        float targetValue = targetState ? 1f : 0f; if (!foldoutAnimValues.ContainsKey(key)) { foldoutAnimValues[key] = targetValue; }
-        float currentValue = foldoutAnimValues[key]; if (!Mathf.Approximately(currentValue, targetValue)) { foldoutAnimValues[key] = Mathf.MoveTowards(currentValue, targetValue, Time.deltaTime * FOLDOUT_ANIM_SPEED); needsRepaint = true; }
+    {
+        float targetValue = targetState ? 1f : 0f;
+        if (!foldoutAnimValues.ContainsKey(key))
+        {
+            foldoutAnimValues[key] = targetValue;
+        }
+        float currentValue = foldoutAnimValues[key];
+        if (!Mathf.Approximately(currentValue, targetValue))
+        {
+            foldoutAnimValues[key] = Mathf.MoveTowards(currentValue, targetValue, Time.deltaTime * FOLDOUT_ANIM_SPEED);
+            needsRepaint = true;
+        }
     }
+
     private void ShowFeedback(string message, MessageType type = MessageType.Info, float duration = FEEDBACK_DURATION)
-    { /* (Same as before) */
-        feedbackMessage = message; feedbackType = type; showFeedback = true; feedbackExpireTime = EditorApplication.timeSinceStartup + duration; Repaint();
+    {
+        feedbackMessage = message;
+        feedbackType = type;
+        showFeedback = true;
+        feedbackExpireTime = EditorApplication.timeSinceStartup + duration;
+        Repaint();
     }
+
     private bool AreCoreComponentsAssigned()
-    { /* (Same as before) */
-        return groundTilemapProp.objectReferenceValue != null && wallTilemapProp.objectReferenceValue != null && floorTileProp.objectReferenceValue != null && wallTileProp.objectReferenceValue != null;
+    {
+        return groundTilemapProp.objectReferenceValue != null &&
+               wallTilemapProp.objectReferenceValue != null &&
+               floorTileProp.objectReferenceValue != null &&
+               wallTileProp.objectReferenceValue != null;
     }
 
     public override void OnInspectorGUI()
@@ -233,9 +301,15 @@ public class HybridLevelGeneratorEditor : Editor
         // --- Feedback Area ---
         if (showFeedback)
         {
-            EditorGUILayout.Space(5); EditorGUILayout.HelpBox(feedbackMessage, feedbackType);
-            Rect fbRect = GUILayoutUtility.GetLastRect(); Color cc = GUI.contentColor; GUI.contentColor = Color.grey;
-            if (GUI.Button(new Rect(fbRect.xMax - 18, fbRect.y + 1, 16, 16), "x", EditorStyles.miniButton)) { showFeedback = false; }
+            EditorGUILayout.Space(5);
+            EditorGUILayout.HelpBox(feedbackMessage, feedbackType);
+            Rect fbRect = GUILayoutUtility.GetLastRect();
+            Color cc = GUI.contentColor;
+            GUI.contentColor = Color.grey;
+            if (GUI.Button(new Rect(fbRect.xMax - 18, fbRect.y + 1, 16, 16), "x", EditorStyles.miniButton))
+            {
+                showFeedback = false;
+            }
             GUI.contentColor = cc;
         }
         // --- End Feedback Area ---
@@ -248,9 +322,12 @@ public class HybridLevelGeneratorEditor : Editor
         GUI.backgroundColor = generateButtonColor;
         if (GUILayout.Button(new GUIContent(" Generate Level", EditorGUIUtility.IconContent("d_PlayButton On").image, "Generate the level using current settings"), generateButtonStyle))
         {
-            HybridLevelGenerator generator = (HybridLevelGenerator)target; Undo.RecordObject(generator, "Generate Level Action");
-            bool skipClearFlag = (generator.generationMode == GenerationMode.UserDefinedLayout); generator.GenerateLevel(skipClearFlag);
-            MarkSceneDirty(generator); ShowFeedback("Level Generation Triggered!", MessageType.Info);
+            HybridLevelGenerator generator = (HybridLevelGenerator)target;
+            Undo.RecordObject(generator, "Generate Level Action");
+            bool skipClearFlag = (generator.generationMode == GenerationMode.UserDefinedLayout);
+            generator.GenerateLevel(skipClearFlag);
+            MarkSceneDirty(generator);
+            ShowFeedback("Level Generation Triggered!", MessageType.Info);
         }
 
         GUI.backgroundColor = clearButtonColor;
@@ -259,130 +336,341 @@ public class HybridLevelGeneratorEditor : Editor
             HybridLevelGenerator generator = (HybridLevelGenerator)target;
             if (EditorUtility.DisplayDialog("Confirm Clear", "Clear generated level content AND scene design nodes (LevelDesignRoot)?", "Clear All", "Cancel"))
             {
-                Undo.RecordObject(generator, "Clear Level"); generator.ClearLevel(); MarkSceneDirty(generator); ShowFeedback("Level Cleared", MessageType.Info);
+                Undo.RecordObject(generator, "Clear Level");
+                generator.ClearLevel();
+                MarkSceneDirty(generator);
+                ShowFeedback("Level Cleared", MessageType.Info);
             }
         }
 
         EditorGUILayout.EndHorizontal();
-        GUI.backgroundColor = originalBgColor; EditorGUI.EndDisabledGroup();
+        GUI.backgroundColor = originalBgColor;
+        EditorGUI.EndDisabledGroup();
         EditorGUILayout.Space(10);
         // --- End Action Buttons Area ---
 
         // --- Simple Help Toggle ---
         showHelp = EditorGUILayout.ToggleLeft(" Show Basic Help", showHelp);
-        if (showHelp) { EditorGUILayout.HelpBox("Workflow:\n1. Select Mode.\n2. Configure Dimensions & Settings.\n3. Assign Tilemaps & Tiles.\n4. Assign Entities (Optional).\n5. Generate Level!\n(Use Visual Designer for User Defined Layout setup).", MessageType.None); }
+        if (showHelp)
+        {
+            EditorGUILayout.HelpBox("Workflow:\n1. Select Mode.\n2. Configure Dimensions & Settings.\n3. Assign Tilemaps & Tiles.\n4. Assign Entities (Optional).\n5. Generate Level!\n(Use Visual Designer for User Defined Layout setup).", MessageType.None);
+        }
         // --- End Simple Help Toggle ---
 
-        if (EditorGUI.EndChangeCheck()) { serializedObject.ApplyModifiedProperties(); }
+        if (EditorGUI.EndChangeCheck())
+        {
+            serializedObject.ApplyModifiedProperties();
+        }
 
-        GUI.backgroundColor = originalBgColor; GUI.contentColor = originalContentColor; // Restore defaults
+        GUI.backgroundColor = originalBgColor;
+        GUI.contentColor = originalContentColor; // Restore defaults
     }
 
     // --- Section Drawing Helpers ---
-    private void DrawHeader() { EditorGUILayout.Space(5);
-    Rect r = GUILayoutUtility.GetRect(GUIContent.none, headerStyle, GUILayout.Height(30));
-    EditorGUI.DrawRect(r, headerColor);
-    GUI.Label(r, "Hybrid Procedural Level Generator", headerStyle);
-    EditorGUILayout.Space(5);
-    
-    // Add developer credit below header
-    GUIStyle creditStyle = new GUIStyle(EditorStyles.miniLabel);
-    creditStyle.alignment = TextAnchor.MiddleCenter;
-    creditStyle.normal.textColor = EditorGUIUtility.isProSkin ? new Color(0.7f, 0.7f, 0.7f) : new Color(0.4f, 0.4f, 0.4f);
-    EditorGUILayout.LabelField("Developed by Dineshkumar & Kamalanathan", creditStyle);
-    EditorGUILayout.Space(5); }
+    private void DrawHeader()
+    {
+        EditorGUILayout.Space(5);
+        Rect r = GUILayoutUtility.GetRect(GUIContent.none, headerStyle, GUILayout.Height(30));
+        EditorGUI.DrawRect(r, headerColor);
+        GUI.Label(r, "Hybrid Procedural Level Generator", headerStyle);
+        EditorGUILayout.Space(5);
+
+        // Add developer credit below header
+        GUIStyle creditStyle = new GUIStyle(EditorStyles.miniLabel);
+        creditStyle.alignment = TextAnchor.MiddleCenter;
+        creditStyle.normal.textColor = EditorGUIUtility.isProSkin ? new Color(0.7f, 0.7f, 0.7f) : new Color(0.4f, 0.4f, 0.4f);
+        EditorGUILayout.LabelField("Developed by Dineshkumar & Kamalanathan", creditStyle);
+        EditorGUILayout.Space(5);
+    }
 
     private void DrawGenerationModeSelector()
-    { /* (Same as before, uses cached GUIContent) */
+    {
         EditorGUILayout.LabelField("Generation Mode", EditorStyles.boldLabel);
-        int currentModeIndex = generationModeProp.enumValueIndex; float pulse = 0.5f + 0.5f * Mathf.Abs(Mathf.Sin(pulseTime));
+        int currentModeIndex = generationModeProp.enumValueIndex;
+        float pulse = 0.5f + 0.5f * Mathf.Abs(Mathf.Sin(pulseTime));
+
         EditorGUILayout.BeginHorizontal();
         for (int i = 0; i < modeButtonContents.Length; i++)
         {
-            bool isSelected = currentModeIndex == i; GUIStyle btnStyle = new GUIStyle(GUI.skin.button); btnStyle.fixedHeight = 30;
-            Color normalBg = modeColors[i] * (EditorGUIUtility.isProSkin ? 0.7f : 1.0f); Color selBg = modeColors[i] * (EditorGUIUtility.isProSkin ? 1.2f : 0.8f); selBg.a = 1.0f;
-            Color txtCol = EditorGUIUtility.isProSkin ? Color.white * 0.8f : Color.black * 0.8f; Color selTxtCol = EditorGUIUtility.isProSkin ? Color.white : Color.black;
-            if (isSelected) { GUI.backgroundColor = Color.Lerp(selBg, selBg * 1.15f, pulse); btnStyle.normal.textColor = selTxtCol; btnStyle.fontStyle = FontStyle.Bold; } else { GUI.backgroundColor = normalBg; btnStyle.normal.textColor = txtCol; }
-            if (GUILayout.Button(modeButtonContents[i], btnStyle)) { if (generationModeProp.enumValueIndex != i) { generationModeProp.enumValueIndex = i; ShowFeedback($"{modeButtonContents[i].text} mode selected.", MessageType.Info); } GUI.FocusControl(null); }
+            bool isSelected = currentModeIndex == i;
+            GUIStyle btnStyle = new GUIStyle(GUI.skin.button);
+            btnStyle.fixedHeight = 30;
+
+            Color normalBg = modeColors[i] * (EditorGUIUtility.isProSkin ? 0.7f : 1.0f);
+            Color selBg = modeColors[i] * (EditorGUIUtility.isProSkin ? 1.2f : 0.8f);
+            selBg.a = 1.0f;
+
+            Color txtCol = EditorGUIUtility.isProSkin ? Color.white * 0.8f : Color.black * 0.8f;
+            Color selTxtCol = EditorGUIUtility.isProSkin ? Color.white : Color.black;
+
+            if (isSelected)
+            {
+                GUI.backgroundColor = Color.Lerp(selBg, selBg * 1.15f, pulse);
+                btnStyle.normal.textColor = selTxtCol;
+                btnStyle.fontStyle = FontStyle.Bold;
+            }
+            else
+            {
+                GUI.backgroundColor = normalBg;
+                btnStyle.normal.textColor = txtCol;
+            }
+
+            if (GUILayout.Button(modeButtonContents[i], btnStyle))
+            {
+                if (generationModeProp.enumValueIndex != i)
+                {
+                    generationModeProp.enumValueIndex = i;
+                    ShowFeedback($"{modeButtonContents[i].text} mode selected.", MessageType.Info);
+                }
+                GUI.FocusControl(null);
+            }
         }
-        GUI.backgroundColor = Color.white; EditorGUILayout.EndHorizontal();
+
+        GUI.backgroundColor = Color.white;
+        EditorGUILayout.EndHorizontal();
+
         EditorGUILayout.HelpBox(GetModeHelpText((GenerationMode)currentModeIndex), MessageType.Info);
+
         if ((GenerationMode)currentModeIndex == GenerationMode.UserDefinedLayout)
         {
-            EditorGUILayout.Space(5); Color obg = GUI.backgroundColor; GUI.backgroundColor = accentColor * (EditorGUIUtility.isProSkin ? 1.0f : 1.3f);
+            EditorGUILayout.Space(5);
+            Color obg = GUI.backgroundColor;
+            GUI.backgroundColor = accentColor * (EditorGUIUtility.isProSkin ? 1.0f : 1.3f);
+
             if (GUILayout.Button(new GUIContent(" Open Visual Level Designer", EditorGUIUtility.IconContent("d_EditCollider").image), GUILayout.Height(30)))
             {
-                var win = EditorWindow.GetWindow<VisualLevelDesignEditor>("Visual Level Designer"); win.Show(); win.Focus(); ShowFeedback("Visual Level Designer opened.", MessageType.Info);
+                var win = EditorWindow.GetWindow<VisualLevelDesignEditor>("Visual Level Designer");
+                win.Show();
+                win.Focus();
+                ShowFeedback("Visual Level Designer opened.", MessageType.Info);
             }
+
             GUI.backgroundColor = obg;
         }
+
         EditorGUILayout.Space(10);
     }
 
     // Foldout helper using FadeGroup
     private void DrawFoldoutSection(string key, string title, ref bool foldout, Action drawContent)
-    { /* (Same as before) */
+    {
         EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-        bool newState = EditorGUILayout.Foldout(foldout, title, true, foldoutHeaderStyle); if (newState != foldout) { foldout = newState; }
-        if (foldoutAnimValues.ContainsKey(key)) { if (EditorGUILayout.BeginFadeGroup(foldoutAnimValues[key])) { EditorGUI.indentLevel++; EditorGUILayout.Space(5); if (drawContent != null) { drawContent(); } EditorGUILayout.Space(5); EditorGUI.indentLevel--; } EditorGUILayout.EndFadeGroup(); }
-        EditorGUILayout.EndVertical(); EditorGUILayout.Space(3);
+        bool newState = EditorGUILayout.Foldout(foldout, title, true, foldoutHeaderStyle);
+        if (newState != foldout)
+        {
+            foldout = newState;
+        }
+
+        if (foldoutAnimValues.ContainsKey(key))
+        {
+            if (EditorGUILayout.BeginFadeGroup(foldoutAnimValues[key]))
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.Space(5);
+                if (drawContent != null)
+                {
+                    drawContent();
+                }
+                EditorGUILayout.Space(5);
+                EditorGUI.indentLevel--;
+            }
+            EditorGUILayout.EndFadeGroup();
+        }
+
+        EditorGUILayout.EndVertical();
+        EditorGUILayout.Space(3);
     }
 
     // --- Specific Section Drawing Methods ---
     private void DrawLevelDimensionsSection()
-    { /* (Same as before, uses PropertyField) */
+    {
         EditorGUILayout.PropertyField(levelWidthProp, new GUIContent("Level Width", "Max grid width."));
         EditorGUILayout.PropertyField(levelHeightProp, new GUIContent("Level Height", "Max grid height."));
-        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Random Seed", subHeaderStyle);
+
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("Random Seed", subHeaderStyle);
         EditorGUILayout.PropertyField(useRandomSeedProp, new GUIContent("Use Random Seed", "Use time-based seed?"));
-        EditorGUI.BeginDisabledGroup(useRandomSeedProp.boolValue); EditorGUILayout.BeginHorizontal(); EditorGUILayout.PropertyField(seedProp, new GUIContent("Seed Value", "Manual seed.")); if (GUILayout.Button("New", EditorStyles.miniButton, GUILayout.Width(50))) { seedProp.intValue = UnityEngine.Random.Range(1, 999999); ShowFeedback($"New seed: {seedProp.intValue}", MessageType.None, 2.0f); }
-        EditorGUILayout.EndHorizontal(); EditorGUI.EndDisabledGroup();
+
+        EditorGUI.BeginDisabledGroup(useRandomSeedProp.boolValue);
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.PropertyField(seedProp, new GUIContent("Seed Value", "Manual seed."));
+
+        if (GUILayout.Button("New", EditorStyles.miniButton, GUILayout.Width(50)))
+        {
+            seedProp.intValue = UnityEngine.Random.Range(1, 999999);
+            ShowFeedback($"New seed: {seedProp.intValue}", MessageType.None, 2.0f);
+        }
+
+        EditorGUILayout.EndHorizontal();
+        EditorGUI.EndDisabledGroup();
     }
+
     private void DrawBspSection()
-    { /* (Same as before, uses PropertyField) */
+    {
         EditorGUILayout.PropertyField(minRoomSizeProp, new GUIContent("Min Room Size", "Min width/height for BSP leaves & Rects."));
         EditorGUILayout.PropertyField(maxIterationsProp, new GUIContent("BSP Iterations", "Number of BSP splits."));
         EditorGUILayout.PropertyField(roomPaddingProp, new GUIContent("Room Padding", "Empty cells between procedural rooms."));
     }
+
     private void DrawHybridSection()
-    { /* (Same as before, uses PropertyField/Slider where appropriate) */
+    {
         EditorGUILayout.LabelField("Procedural Room Chances", subHeaderStyle);
         EditorGUILayout.PropertyField(lShapeProbabilityProp, new GUIContent("L-Shape Chance", "Chance (0-1) for proc. room = L-Shape."));
         EditorGUILayout.PropertyField(roomTemplateProbabilityProp, new GUIContent("Template Chance", "Chance (0-1) for proc. room = Template."));
-        if (lShapeProbabilityProp.floatValue + roomTemplateProbabilityProp.floatValue > 1.01f) { EditorGUILayout.HelpBox("Probabilities exceed 100%.", MessageType.Warning); }
-        EditorGUILayout.Space(5); EditorGUILayout.LabelField("L-Shape Leg Ratios", subHeaderStyle);
+
+        if (lShapeProbabilityProp.floatValue + roomTemplateProbabilityProp.floatValue > 1.01f)
+        {
+            EditorGUILayout.HelpBox("Probabilities exceed 100%.", MessageType.Warning);
+        }
+
+        EditorGUILayout.Space(5);
+        EditorGUILayout.LabelField("L-Shape Leg Ratios", subHeaderStyle);
         minLLegRatioProp.floatValue = EditorGUILayout.Slider(new GUIContent("Min Leg Ratio", "Min size ratio of smaller leg."), minLLegRatioProp.floatValue, 0.2f, 0.8f);
         maxLLegRatioProp.floatValue = EditorGUILayout.Slider(new GUIContent("Max Leg Ratio", "Max size ratio of smaller leg."), maxLLegRatioProp.floatValue, minLLegRatioProp.floatValue, 0.8f);
-        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Room Templates List", subHeaderStyle);
-        EditorGUILayout.PropertyField(roomTemplatePrefabsProp, true); EditorGUILayout.HelpBox("Assign Room Template Prefabs (must contain Tilemap).", MessageType.None);
-        EditorGUILayout.Space(5); EditorGUILayout.LabelField("User Defined Node Default", subHeaderStyle);
+
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("Room Templates List", subHeaderStyle);
+        EditorGUILayout.PropertyField(roomTemplatePrefabsProp, true);
+        EditorGUILayout.HelpBox("Assign Room Template Prefabs (must contain Tilemap).", MessageType.None);
+
+        EditorGUILayout.Space(5);
+        EditorGUILayout.LabelField("User Defined Node Default", subHeaderStyle);
         EditorGUILayout.PropertyField(defaultSceneNodeSizeProp, new GUIContent("Default Node Size", "Size for UserDefined nodes if size is zero."));
     }
+
     private void DrawCorridorSection()
-    { /* (Same as before, uses PropertyField) */
+    {
         EditorGUILayout.PropertyField(corridorWidthProp, new GUIContent("Corridor Width", "Width of corridors (in tiles)."));
     }
+
     private void DrawTilemapSection()
-    { /* (Same as before, uses PropertyField) */
+    {
         EditorGUILayout.LabelField("Required Tilemaps", subHeaderStyle);
         EditorGUILayout.PropertyField(groundTilemapProp, new GUIContent("Ground Tilemap"));
         EditorGUILayout.PropertyField(wallTilemapProp, new GUIContent("Wall Tilemap"));
-        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Required Tiles", subHeaderStyle);
+
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("Required Tiles", subHeaderStyle);
         EditorGUILayout.PropertyField(floorTileProp, new GUIContent("Floor Tile"));
         EditorGUILayout.PropertyField(wallTileProp, new GUIContent("Wall Tile"));
+
+        // Updated directional walls section with rotation options
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("Directional Wall Tiles", subHeaderStyle);
+        EditorGUILayout.PropertyField(useDirectionalWallsProp, new GUIContent("Use Directional Walls", "Enable to use different tiles for walls based on their orientation"));
+
+        if (useDirectionalWallsProp.boolValue)
+        {
+            EditorGUI.indentLevel++;
+
+            EditorGUILayout.LabelField("Basic Wall Directions", EditorStyles.boldLabel);
+            DrawDirectionalTileField("Bottom Wall Tile", "Wall with floor below (Sprite #1)", wallTileBottomProp);
+            DrawDirectionalTileField("Top Wall Tile", "Wall with floor above (Sprite #2)", wallTileTopProp);
+            DrawDirectionalTileField("Right Wall Tile", "Wall with floor on the right (Sprite #3)", wallTileRightProp);
+            DrawDirectionalTileField("Left Wall Tile", "Wall with floor on the left (Sprite #4)", wallTileLeftProp);
+
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField("Inner Corner Tiles", EditorStyles.boldLabel);
+            DrawDirectionalTileField("Inner Top-Left", "Inner corner with floor on left and top (Sprite #5)", wallTileInnerTopLeftProp);
+            DrawDirectionalTileField("Inner Top-Right", "Inner corner with floor on right and top (Sprite #6)", wallTileInnerTopRightProp);
+            DrawDirectionalTileField("Inner Bottom-Left", "Inner corner with floor on left and bottom (Sprite #7)", wallTileInnerBottomLeftProp);
+            DrawDirectionalTileField("Inner Bottom-Right", "Inner corner with floor on right and bottom (Sprite #8)", wallTileInnerBottomRightProp);
+
+            EditorGUILayout.Space(5);
+            EditorGUILayout.LabelField("Outer Corner Tiles", EditorStyles.boldLabel);
+            // Fixed order of outer corner tiles to match what's shown in the UI
+            DrawDirectionalTileField("Outer Top-Left", "Outer corner at top-left edge of room (Sprite #9)", wallTileOuterTopLeftProp);
+            DrawDirectionalTileField("Outer Top-Right", "Outer corner at top-right edge of room (Sprite #10)", wallTileOuterTopRightProp);
+            DrawDirectionalTileField("Outer Bottom-Left", "Outer corner at bottom-left edge of room (Sprite #11)", wallTileOuterBottomLeftProp);
+            DrawDirectionalTileField("Outer Bottom-Right", "Outer corner at bottom-right edge of room (Sprite #12)", wallTileOuterBottomRightProp);
+
+            EditorGUI.indentLevel--;
+
+            bool anyBasicTilesMissing =
+                wallTileLeftProp.FindPropertyRelative("tile").objectReferenceValue == null ||
+                wallTileRightProp.FindPropertyRelative("tile").objectReferenceValue == null ||
+                wallTileTopProp.FindPropertyRelative("tile").objectReferenceValue == null ||
+                wallTileBottomProp.FindPropertyRelative("tile").objectReferenceValue == null;
+
+            if (anyBasicTilesMissing)
+            {
+                EditorGUILayout.HelpBox("Please assign all four basic directional wall tiles for the system to work correctly.", MessageType.Warning);
+            }
+        }
+
+        // Keep the existing tile variants section
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("Tile Variations", subHeaderStyle);
+        EditorGUILayout.PropertyField(floorTileVariantsProp, new GUIContent("Floor Tile Variants", "Additional floor tiles to randomly use during generation"));
+        EditorGUILayout.PropertyField(wallTileVariantsProp, new GUIContent("Wall Tile Variants", "Additional wall tiles to randomly use during generation"));
+        EditorGUILayout.Slider(variantTileChanceProp, 0f, 1f, new GUIContent("Variant Chance", "Chance to use a variant tile instead of the main tile (0-1)"));
+
+        if (floorTileVariantsProp.arraySize > 0 || wallTileVariantsProp.arraySize > 0)
+        {
+            EditorGUILayout.HelpBox("Tile variants will be randomly used according to the Variant Chance value.", MessageType.Info);
+        }
+
+        if (useDirectionalWallsProp.boolValue && (wallTileVariantsProp.arraySize > 0 && variantTileChanceProp.floatValue > 0))
+        {
+            EditorGUILayout.HelpBox("Note: When both Directional Walls and Wall Tile Variants are enabled, Directional Walls take precedence.", MessageType.Info);
+        }
     }
+
+    // Helper method to draw a DirectionalTile field with tile and rotation properties
+    private void DrawDirectionalTileField(string label, string tooltip, SerializedProperty directionalTileProp)
+    {
+        // Begin horizontal for the directional tile row
+        EditorGUILayout.BeginHorizontal();
+
+        SerializedProperty tileProp = directionalTileProp.FindPropertyRelative("tile");
+        SerializedProperty rotationProp = directionalTileProp.FindPropertyRelative("rotation");
+
+        // Tile field takes 70% of the width
+        EditorGUILayout.PropertyField(tileProp, new GUIContent(label, tooltip), GUILayout.Width(EditorGUIUtility.currentViewWidth * 0.55f));
+
+        // Rotation dropdown takes 30% of the width
+        EditorGUILayout.PropertyField(rotationProp, GUIContent.none, GUILayout.Width(EditorGUIUtility.currentViewWidth * 0.25f));
+
+        EditorGUILayout.EndHorizontal();
+    }
+
     private void DrawEntitySection()
-    { /* (Same as before, uses PropertyField/IntSlider) */
-        EditorGUILayout.LabelField("Player", subHeaderStyle); EditorGUILayout.PropertyField(playerPrefabProp, new GUIContent("Player Prefab"));
-        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Enemies", subHeaderStyle); EditorGUILayout.PropertyField(enemyPrefabProp, new GUIContent("Enemy Prefab")); EditorGUILayout.PropertyField(enemiesPerRoomProp, new GUIContent("Max Enemies/Room")); // Using PropertyField for Range attribute
-        EditorGUILayout.Space(8); EditorGUILayout.LabelField("Decorations", subHeaderStyle); EditorGUILayout.PropertyField(decorationPrefabProp, new GUIContent("Decoration Prefab")); EditorGUILayout.PropertyField(decorationsPerRoomProp, new GUIContent("Max Decors/Room"));
-    } // Using PropertyField for Range attribute
+    {
+        EditorGUILayout.LabelField("Player", subHeaderStyle);
+        EditorGUILayout.PropertyField(playerPrefabProp, new GUIContent("Player Prefab"));
+
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("Enemies", subHeaderStyle);
+        EditorGUILayout.PropertyField(enemyPrefabProp, new GUIContent("Enemy Prefab"));
+        EditorGUILayout.PropertyField(enemiesPerRoomProp, new GUIContent("Max Enemies/Room")); // Using PropertyField for Range attribute
+
+        EditorGUILayout.Space(8);
+        EditorGUILayout.LabelField("Decorations", subHeaderStyle);
+        EditorGUILayout.PropertyField(decorationPrefabProp, new GUIContent("Decoration Prefab"));
+        EditorGUILayout.PropertyField(decorationsPerRoomProp, new GUIContent("Max Decors/Room"));
+    }
 
     // --- Utility ---
     private void MarkSceneDirty(HybridLevelGenerator generator)
-    { /* (Same as before) */
-        if (!Application.isPlaying && generator != null && generator.gameObject != null) { try { if (generator.gameObject.scene != null && generator.gameObject.scene.IsValid() && generator.gameObject.scene.isLoaded) { UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene); } } catch (Exception e) { Debug.LogWarning($"Could not mark scene dirty: {e.Message}"); } }
+    {
+        if (!Application.isPlaying && generator != null && generator.gameObject != null)
+        {
+            try
+            {
+                if (generator.gameObject.scene != null &&
+                    generator.gameObject.scene.IsValid() &&
+                    generator.gameObject.scene.isLoaded)
+                {
+                    UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene);
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning($"Could not mark scene dirty: {e.Message}");
+            }
+        }
     }
+
     private string GetModeHelpText(GenerationMode mode)
     {
         switch (mode)
@@ -397,5 +685,4 @@ public class HybridLevelGeneratorEditor : Editor
                 return "Unknown Generation Mode Selected.";
         }
     }
-
-} // --- End of HybridLevelGeneratorEditor Class ---
+}

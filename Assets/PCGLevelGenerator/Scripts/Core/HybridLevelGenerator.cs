@@ -5,18 +5,16 @@ using System; // Required for System.Random
 using System.Linq;
 using UnityEditor; // Keep for Undo/EditorUtility
 
-// Assumes GenerationMode, NodeType, TileType defined in LevelGenerationTypes.cs or similar
-// ██████╗  ██████╗  ██████╗    ██╗     ███████╗██╗   ██╗███████╗██╗         ██████╗ ███████╗███╗   ██╗
-// ██╔══██╗██╔════╝ ██╔════╝    ██║     ██╔════╝██║   ██║██╔════╝██║        ██╔════╝ ██╔════╝████╗  ██║
-// ██████╔╝██║      ██║  ███╗   ██║     █████╗  ██║   ██║█████╗  ██║        ██║  ███╗█████╗  ██╔██╗ ██║
-// ██╔═══╝ ██║      ██║   ██║   ██║     ██╔══╝  ╚██╗ ██╔╝██╔══╝  ██║        ██║   ██║██╔══╝  ██║╚██╗██║
-// ██║     ╚██████╗ ╚██████╔╝   ███████╗███████╗ ╚████╔╝ ███████╗███████╗   ╚██████╔╝███████╗██║ ╚████║
-// ╚═╝      ╚═════╝  ╚═════╝    ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝    ╚═════╝ ╚══════╝╚═╝  ╚═══╝
-//
-// PCG Level Generator for Unity
-// Copyright (c) 2025 Dineshkumar & Kamalanathan
-// Version: 1.0.0
-
+// Wall rotation options for the directional wall tiles
+public enum TileRotation
+{
+    None = 0,       // No rotation
+    Clockwise90 = 1,    // 90 degrees clockwise
+    Clockwise180 = 2,   // 180 degrees
+    Clockwise270 = 3,   // 270 degrees clockwise
+    FlipHorizontal = 4, // Flip horizontally
+    FlipVertical = 5    // Flip vertically
+}
 
 public class HybridLevelGenerator : MonoBehaviour
 {
@@ -71,6 +69,80 @@ public class HybridLevelGenerator : MonoBehaviour
     [Tooltip("Required: The TileBase asset representing walls.")]
     public TileBase wallTile;
 
+    [System.Serializable]
+    public class DirectionalTile
+    {
+        public TileBase tile;
+        public TileRotation rotation = TileRotation.None;
+
+        public Matrix4x4 GetRotationMatrix()
+        {
+            switch (rotation)
+            {
+                case TileRotation.Clockwise90:
+                    return Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(0, 0, 270), Vector3.one);
+                case TileRotation.Clockwise180:
+                    return Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(0, 0, 180), Vector3.one);
+                case TileRotation.Clockwise270:
+                    return Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(0, 0, 90), Vector3.one);
+                case TileRotation.FlipHorizontal:
+                    return Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(-1, 1, 1));
+                case TileRotation.FlipVertical:
+                    return Matrix4x4.TRS(Vector3.zero, Quaternion.identity, new Vector3(1, -1, 1));
+                default:
+                    return Matrix4x4.identity;
+            }
+        }
+    }
+
+    [Header("Directional Wall Tiles")]
+    public bool useDirectionalWalls = true;
+
+    [Tooltip("Wall with floor on the left")]
+    public DirectionalTile wallTileLeft = new DirectionalTile();
+
+    [Tooltip("Wall with floor on the right")]
+    public DirectionalTile wallTileRight = new DirectionalTile();
+
+    [Tooltip("Wall with floor above")]
+    public DirectionalTile wallTileTop = new DirectionalTile();
+
+    [Tooltip("Wall with floor below")]
+    public DirectionalTile wallTileBottom = new DirectionalTile();
+
+    [Tooltip("Inner corner with floor on top and left")]
+    public DirectionalTile wallTileInnerTopLeft = new DirectionalTile();
+
+    [Tooltip("Inner corner with floor on top and right")]
+    public DirectionalTile wallTileInnerTopRight = new DirectionalTile();
+
+    [Tooltip("Inner corner with floor on bottom and left")]
+    public DirectionalTile wallTileInnerBottomLeft = new DirectionalTile();
+
+    [Tooltip("Inner corner with floor on bottom and right")]
+    public DirectionalTile wallTileInnerBottomRight = new DirectionalTile();
+
+    [Tooltip("Outer corner at top-left edge of room")]
+    public DirectionalTile wallTileOuterTopLeft = new DirectionalTile();
+
+    [Tooltip("Outer corner at top-right edge of room")]
+    public DirectionalTile wallTileOuterTopRight = new DirectionalTile();
+
+    [Tooltip("Outer corner at bottom-left edge of room")]
+    public DirectionalTile wallTileOuterBottomLeft = new DirectionalTile();
+
+    [Tooltip("Outer corner at bottom-right edge of room")]
+    public DirectionalTile wallTileOuterBottomRight = new DirectionalTile();
+
+    [Header("Tile Variations")]
+    [Tooltip("Additional floor tiles to randomly use during generation.")]
+    public List<TileBase> floorTileVariants = new List<TileBase>();
+    [Tooltip("Additional wall tiles to randomly use during generation.")]
+    public List<TileBase> wallTileVariants = new List<TileBase>();
+    [Range(0f, 1f)]
+    [Tooltip("Chance to use a variant tile instead of the main tile (0-1).")]
+    public float variantTileChance = 0.4f;
+
     [Header("Randomness")]
     [Tooltip("Seed for the random number generator. 0 or checking 'Use Random Seed' generates a new seed each time.")]
     public int seed = 0;
@@ -89,7 +161,6 @@ public class HybridLevelGenerator : MonoBehaviour
     [Tooltip("Maximum number of decorations to attempt spawning per room.")]
     [Range(0, 20)] public int decorationsPerRoom = 3;
 
-
     // --- Internal Data ---
     private TileType[,] grid;
     private List<RectInt> bspLeaves;
@@ -101,15 +172,146 @@ public class HybridLevelGenerator : MonoBehaviour
     private Transform enemiesHolder;
     private Transform decorationsHolder;
 
-    // --- Public Methods ---
+    // --- Wall Type Enum (13 types total) ---
+    private enum WallType
+    {
+        Default,
+        Bottom,    // Sprite #1
+        Top,       // Sprite #2 
+        Right,     // Sprite #3
+        Left,      // Sprite #4
+        InnerTopLeft,     // Sprite #5
+        InnerTopRight,    // Sprite #6
+        InnerBottomLeft,  // Sprite #7
+        InnerBottomRight, // Sprite #8
+        OuterTopLeft,     // Sprite #9
+        OuterTopRight,    // Sprite #10
+        OuterBottomLeft,  // Sprite #11
+        OuterBottomRight  // Sprite #12
+    }
+
+    #region Public Methods
 
     [ContextMenu("Generate Level")]
     public void GenerateLevel()
     {
+        Debug.Log("CUSTOM LOG: Generate Level called with tile variants!");
         GenerateLevel(false); // Default context menu call clears based on mode
     }
 
     // Helper method for clearing only generated content (Tiles, Entities, internal data)
+    private void RemoveExistingOuterCornerTiles()
+    {
+        for (int x = 0; x < levelWidth; x++)
+        {
+            for (int y = 0; y < levelHeight; y++)
+            {
+                Vector3Int pos = new Vector3Int(x, y, 0);
+                TileBase tile = wallTilemap.GetTile(pos);
+
+                // Remove any tiles that match outer corner tiles
+                if (tile == wallTileOuterTopLeft.tile ||
+                    tile == wallTileOuterTopRight.tile ||
+                    tile == wallTileOuterBottomLeft.tile ||
+                    tile == wallTileOuterBottomRight.tile)
+                {
+                    wallTilemap.SetTile(pos, null);
+                }
+            }
+        }
+    }
+    public void AddMissingCornerTiles()
+    {
+        Debug.Log("AddMissingCornerTiles: Starting room corner tile placement...");
+
+        // First remove any existing outer corner tiles
+        RemoveExistingOuterCornerTiles();
+
+        if (wallTileOuterTopLeft.tile == null || wallTileOuterTopRight.tile == null ||
+            wallTileOuterBottomLeft.tile == null || wallTileOuterBottomRight.tile == null)
+        {
+            Debug.LogWarning("AddMissingCornerTiles: Some outer corner tiles are not assigned!");
+            return;
+        }
+
+        if (placedRoomBounds == null || placedRoomBounds.Count == 0)
+        {
+            Debug.LogWarning("AddMissingCornerTiles: No room bounds found!");
+            return;
+        }
+
+        int cornersPlaced = 0;
+
+        // For each room, properly place corner tiles
+        foreach (var roomBounds in placedRoomBounds.Values)
+        {
+            // Calculate wall corner positions (outside the floor area)
+            // These are the correct positions as shown by the arrows in your image
+            Vector3Int topLeft = new Vector3Int(roomBounds.xMin - 1, roomBounds.yMax, 0);
+            Vector3Int topRight = new Vector3Int(roomBounds.xMax, roomBounds.yMax, 0);
+            Vector3Int bottomLeft = new Vector3Int(roomBounds.xMin - 1, roomBounds.yMin - 1, 0);
+            Vector3Int bottomRight = new Vector3Int(roomBounds.xMax, roomBounds.yMin - 1, 0);
+
+            // Place corner tiles at these exact positions
+            if (IsCoordInBounds(topLeft.x, topLeft.y))
+            {
+                wallTilemap.SetTile(topLeft, wallTileOuterTopLeft.tile);
+                if (wallTileOuterTopLeft.rotation != TileRotation.None)
+                    wallTilemap.SetTransformMatrix(topLeft, wallTileOuterTopLeft.GetRotationMatrix());
+                cornersPlaced++;
+            }
+
+            if (IsCoordInBounds(topRight.x, topRight.y))
+            {
+                wallTilemap.SetTile(topRight, wallTileOuterTopRight.tile);
+                if (wallTileOuterTopRight.rotation != TileRotation.None)
+                    wallTilemap.SetTransformMatrix(topRight, wallTileOuterTopRight.GetRotationMatrix());
+                cornersPlaced++;
+            }
+
+            if (IsCoordInBounds(bottomLeft.x, bottomLeft.y))
+            {
+                wallTilemap.SetTile(bottomLeft, wallTileOuterBottomLeft.tile);
+                if (wallTileOuterBottomLeft.rotation != TileRotation.None)
+                    wallTilemap.SetTransformMatrix(bottomLeft, wallTileOuterBottomLeft.GetRotationMatrix());
+                cornersPlaced++;
+            }
+
+            if (IsCoordInBounds(bottomRight.x, bottomRight.y))
+            {
+                wallTilemap.SetTile(bottomRight, wallTileOuterBottomRight.tile);
+                if (wallTileOuterBottomRight.rotation != TileRotation.None)
+                    wallTilemap.SetTransformMatrix(bottomRight, wallTileOuterBottomRight.GetRotationMatrix());
+                cornersPlaced++;
+            }
+        }
+
+        Debug.Log($"AddMissingCornerTiles: Placed {cornersPlaced} corner tiles at room corners");
+    }
+
+
+    private bool IsRoomCorner(int x, int y, bool isTop, bool isLeft)
+    {
+        // This should only be called for actual room corners, so we're checking
+        // if this position is actually a floor tile (inside the room)
+        if (!IsCoordInBounds(x, y) || grid[x, y] != TileType.Floor)
+            return false;
+
+        // Get the positions we need to check
+        int wallX = isLeft ? x - 1 : x + 1;
+        int wallY = isTop ? y + 1 : y - 1;
+        int cornerX = isLeft ? x - 1 : x + 1;
+        int cornerY = isTop ? y + 1 : y - 1;
+
+        // Check if we have walls in the appropriate directions
+        bool hasWallSide1 = IsCoordInBounds(wallX, y) && grid[wallX, y] == TileType.Wall;
+        bool hasWallSide2 = IsCoordInBounds(x, wallY) && grid[x, wallY] == TileType.Wall;
+
+        // A valid room corner has walls on both adjacent sides
+        return hasWallSide1 && hasWallSide2;
+    }
+
+
     private void ClearGeneratedContentOnly()
     {
         Debug.Log("Clearing generated content (Tiles, Entities)...");
@@ -215,9 +417,15 @@ public class HybridLevelGenerator : MonoBehaviour
         {
             Debug.LogError($"--- Level Generation FAILED (Mode: {generationMode}) --- Check previous logs for specific error details.");
         }
+        if (generationSuccess)
+        {
+            ApplyTilesToTilemap();
+            // AddMissingCornerTiles() should now be called from within ApplyTilesToTilemap()
+            SpawnEntities();
+            Debug.Log($"--- Level Generation Complete --- Seed: {seed}. Rooms placed: {placedRoomBounds?.Count ?? 0}.");
+        }
         // --- End Final Steps ---
     }
-
 
     // Full Clear method - Clears generated content AND scene nodes
     [ContextMenu("Clear Level")]
@@ -233,12 +441,16 @@ public class HybridLevelGenerator : MonoBehaviour
         Debug.Log("Generated content and scene nodes cleared.");
     }
 
-    // --- Initialization and Setup ---
+    #endregion
+
+    #region Initialization and Setup
+
     private void Initialize()
     {
         if (useRandomSeed || seed == 0)
         {
-            seed = Environment.TickCount;
+            // Use current time + a random offset to ensure different seeds each time
+            seed = Environment.TickCount + UnityEngine.Random.Range(1, 10000);
         }
         pseudoRandom = new System.Random(seed);
         Debug.Log($"Using Seed: {seed}");
@@ -265,7 +477,10 @@ public class HybridLevelGenerator : MonoBehaviour
         decorationsHolder = CreateOrFindParent("DecorationsHolder");
     }
 
-    // --- Mode-Specific Generation Pipelines ---
+    #endregion
+
+    #region Generation Pipelines
+
     private bool GenerateProceduralLevel()
     {
         RunBSPSplit();
@@ -412,10 +627,12 @@ public class HybridLevelGenerator : MonoBehaviour
         return true;
     }
 
+    #endregion
 
-    // --- Room Creation Helpers ---
+    #region Room Creation Helpers
+
     private void CreateRoomsInLeaves_Procedural()
-    { /* (Same as before) */
+    {
         if (bspLeaves == null) { Debug.LogError("BSP leaves not generated!"); return; }
         if (placedRoomBounds == null) placedRoomBounds = new Dictionary<string, RectInt>();
         placedRoomBounds.Clear();
@@ -431,8 +648,9 @@ public class HybridLevelGenerator : MonoBehaviour
         }
         Debug.Log($"Procedural room creation complete. Rooms generated: {placedRoomBounds.Count}");
     }
+
     private void CreateRoomsInLeaves_Hybrid()
-    { /* (Same as before) */
+    {
         if (bspLeaves == null) { Debug.LogError("BSP leaves not generated!"); return; }
         if (placedRoomBounds == null) placedRoomBounds = new Dictionary<string, RectInt>();
         placedRoomBounds.Clear();
@@ -460,16 +678,18 @@ public class HybridLevelGenerator : MonoBehaviour
         }
         Debug.Log($"Hybrid room creation complete. Rooms generated: {placedRoomBounds.Count}");
     }
+
     private bool TryCreateRectangleInLeaf(RectInt leaf, out RectInt roomRect)
-    { /* (Same as before) */
+    {
         roomRect = RectInt.zero; int padding = Mathf.Max(0, (int)roomPadding); int maxW = leaf.width - (2 * padding); int maxH = leaf.height - (2 * padding);
         if (maxW < minRoomSize || maxH < minRoomSize) return false;
         int w = pseudoRandom.Next(minRoomSize, maxW + 1); int h = pseudoRandom.Next(minRoomSize, maxH + 1);
         int x = leaf.x + padding + pseudoRandom.Next(0, maxW - w + 1); int y = leaf.y + padding + pseudoRandom.Next(0, maxH - h + 1);
         roomRect = new RectInt(x, y, w, h); return IsRectWithinBounds(roomRect);
     }
+
     private bool TryCreateLShapeInLeaf(RectInt leaf, out RectInt stemRect, out RectInt legRect, out RectInt overallBounds)
-    { /* (Same as before) */
+    {
         stemRect = legRect = overallBounds = RectInt.zero; int padding = Mathf.Max(0, (int)roomPadding); int availW = leaf.width - (2 * padding); int availH = leaf.height - (2 * padding); int minL = 1;
         if (availW < minRoomSize || availH < minRoomSize) return false;
         int sW = pseudoRandom.Next(minRoomSize, availW + 1); int sH = pseudoRandom.Next(minRoomSize, availH + 1);
@@ -488,8 +708,9 @@ public class HybridLevelGenerator : MonoBehaviour
         if (!IsRectWithinBounds(stemRect) || !IsRectWithinBounds(legRect)) return false;
         int minX = Mathf.Min(stemRect.xMin, legRect.xMin); int minY = Mathf.Min(stemRect.yMin, legRect.yMin); int maxX = Mathf.Max(stemRect.xMax, legRect.xMax); int maxY = Mathf.Max(stemRect.yMax, legRect.yMax); overallBounds = new RectInt(minX, minY, maxX - minX, maxY - minY); return true;
     }
+
     private bool TryPlaceRoomTemplate(RectInt leaf, string roomId, out RectInt placedBounds)
-    { /* (Same as before) */
+    {
         placedBounds = RectInt.zero; if (roomTemplatePrefabs == null || roomTemplatePrefabs.Count == 0) return false;
         GameObject prefab = roomTemplatePrefabs[pseudoRandom.Next(roomTemplatePrefabs.Count)]; if (prefab == null) return false;
         if (!GetTemplateDimensions(prefab, out int tW, out int tH)) return false;
@@ -498,8 +719,9 @@ public class HybridLevelGenerator : MonoBehaviour
         if (PlaceSpecificRoomTemplate(prefab, new Vector2Int(startX, startY), out placedBounds)) { if (placedRoomBounds == null) placedRoomBounds = new Dictionary<string, RectInt>(); placedRoomBounds[roomId] = placedBounds; return true; }
         return false;
     }
+
     private bool PlaceSpecificRoomTemplate(GameObject templatePrefab, Vector2Int targetGridBottomLeft, out RectInt placedBounds)
-    { /* (Same as before) */
+    {
         placedBounds = RectInt.zero; if (templatePrefab == null) return false; GameObject temp = null;
         try
         {
@@ -510,8 +732,9 @@ public class HybridLevelGenerator : MonoBehaviour
         catch (Exception ex) { Debug.LogError($"Template Placement Exception: {ex.Message}"); return false; }
         finally { if (temp != null) { if (Application.isPlaying) Destroy(temp); else DestroyImmediate(temp); } }
     }
+
     private bool GetTemplateDimensions(GameObject templatePrefab, out int width, out int height)
-    { /* (Same as before) */
+    {
         width = 0; height = 0; if (templatePrefab == null) return false; GameObject temp = null;
         try
         {
@@ -520,8 +743,9 @@ public class HybridLevelGenerator : MonoBehaviour
         catch { return false; }
         finally { if (temp != null) { if (Application.isPlaying) Destroy(temp); else DestroyImmediate(temp); } }
     }
+
     private bool TryCreateLShapeAt(Vector2Int centerPos, Vector2Int size, out RectInt stemRect, out RectInt legRect, out RectInt overallBounds)
-    { /* (Same as before) */
+    {
         stemRect = legRect = overallBounds = RectInt.zero; int minD = 1; if (size.x < minD * 2 || size.y < minD * 2) return false;
         int sW = size.x; int sH = Mathf.Max(minD, Mathf.RoundToInt(size.y * 0.7f)); int lH = Mathf.Max(minD, size.y - sH); int lW = Mathf.Max(minD, Mathf.RoundToInt(size.x * 0.6f));
         int sX = centerPos.x - sW / 2; int sY = centerPos.y - size.y / 2; stemRect = new RectInt(sX, sY, sW, sH);
@@ -530,8 +754,10 @@ public class HybridLevelGenerator : MonoBehaviour
         int minX = Mathf.Min(stemRect.xMin, legRect.xMin); int minY = Mathf.Min(stemRect.yMin, legRect.yMin); int maxX = Mathf.Max(stemRect.xMax, legRect.xMax); int maxY = Mathf.Max(stemRect.yMax, legRect.yMax); overallBounds = new RectInt(minX, minY, maxX - minX, maxY - minY); return true;
     }
 
+    #endregion
 
-    // --- Corridor Connection ---
+    #region Corridor Connection
+
     private void ConnectSceneNodes(RoomNode[] roomNodes)
     {
         Debug.Log("[ConnectSceneNodes] Starting Connection Phase...");
@@ -566,7 +792,7 @@ public class HybridLevelGenerator : MonoBehaviour
     }
 
     private void CreateCorridors_Procedural()
-    { /* (Same as before) */
+    {
         if (placedRoomBounds == null || placedRoomBounds.Count < 2) return;
         List<RectInt> boundsList = new List<RectInt>(placedRoomBounds.Values); List<RectInt> connected = new List<RectInt>(); List<RectInt> unconnected = new List<RectInt>(boundsList);
         RectInt start = unconnected[pseudoRandom.Next(unconnected.Count)]; connected.Add(start); unconnected.Remove(start);
@@ -578,71 +804,549 @@ public class HybridLevelGenerator : MonoBehaviour
         }
         Debug.Log($"Procedural corridor generation complete.");
     }
+
     private void ConnectRects(RectInt roomA, RectInt roomB)
-    { /* (Same as before) */
+    {
         Vector2Int cA = Vector2Int.RoundToInt(roomA.center); Vector2Int cB = Vector2Int.RoundToInt(roomB.center);
         if (pseudoRandom.Next(0, 2) == 0) { CarveCorridorSegment(cA.x, cB.x, cA.y, true); CarveCorridorSegment(cA.y, cB.y, cB.x, false); }
         else { CarveCorridorSegment(cA.y, cB.y, cA.x, false); CarveCorridorSegment(cA.x, cB.x, cB.y, true); }
     }
+
     private void CarveCorridorSegment(int startCoord, int endCoord, int fixedCoord, bool isHorizontal)
-    { /* (Same as before) */
+    {
         if (grid == null) return; int min = Mathf.Min(startCoord, endCoord); int max = Mathf.Max(startCoord, endCoord); int halfW = corridorWidth <= 1 ? 0 : (corridorWidth - 1) / 2;
         for (int i = min; i <= max; i++) { for (int w = -halfW; w <= halfW; w++) { int x, y; if (isHorizontal) { x = i; y = fixedCoord + w; } else { x = fixedCoord + w; y = i; } if (IsCoordInBounds(x, y)) { grid[x, y] = TileType.Floor; } } }
     }
 
+    #endregion
 
-    // --- Tile Placement & Grid Utilities ---
+    #region Tile Placement & Grid Utilities
+
     private void CarveRectangle(RectInt rect, TileType tile)
-    { /* (Same as before) */
+    {
         if (grid == null) return; for (int x = rect.xMin; x < rect.xMax; x++) { for (int y = rect.yMin; y < rect.yMax; y++) { if (IsCoordInBounds(x, y)) { grid[x, y] = tile; } } }
     }
+
     private List<Vector2Int> GetFloorTilesInRect(RectInt rect)
-    { /* (Same as before) */
+    {
         List<Vector2Int> tiles = new List<Vector2Int>(); if (grid == null) return tiles; int sX = Mathf.Max(rect.xMin, 0); int eX = Mathf.Min(rect.xMax, levelWidth); int sY = Mathf.Max(rect.yMin, 0); int eY = Mathf.Min(rect.yMax, levelHeight);
         for (int x = sX; x < eX; x++) { for (int y = sY; y < eY; y++) { if (grid[x, y] == TileType.Floor) { tiles.Add(new Vector2Int(x, y)); } } }
         return tiles;
     }
+
     private Vector3 GetWorldPosition(Vector2Int gridPos)
-    { /* (Same as before) */
+    {
         if (groundTilemap != null) { return groundTilemap.CellToWorld((Vector3Int)gridPos) + groundTilemap.cellSize * 0.5f; }
         else { Debug.LogWarning("Ground Tilemap missing, using fallback world pos calc."); return new Vector3(gridPos.x + 0.5f, gridPos.y + 0.5f, 0); }
     }
-    private bool IsCoordInBounds(int x, int y) { /* (Same as before) */ return x >= 0 && x < levelWidth && y >= 0 && y < levelHeight; }
-    private bool IsRectWithinBounds(RectInt rect) { /* (Same as before) */ return rect.xMin >= 0 && rect.xMax <= levelWidth && rect.yMin >= 0 && rect.yMax <= levelHeight; }
 
-    // --- Tilemap Application ---
+    private bool IsCoordInBounds(int x, int y)
+    {
+        return x >= 0 && x < levelWidth && y >= 0 && y < levelHeight;
+    }
+
+    private bool IsRectWithinBounds(RectInt rect)
+    {
+        return rect.xMin >= 0 && rect.xMax <= levelWidth && rect.yMin >= 0 && rect.yMax <= levelHeight;
+    }
+
+    // --- Improved Wall Type Detection Method that matches the sprite numbering ---
+    // Replace ONLY this method in your HybridLevelGenerator.cs file
+
+    // Update the DetermineWallType method in your HybridLevelGenerator.cs file
+    // This improves the outer corner detection logic
+
+    // Replace the DetermineWallType method in your HybridLevelGenerator.cs file
+    // This provides more precise corner detection
+
+    // Replace the DetermineWallType method in your HybridLevelGenerator.cs file
+    // This provides the most accurate corner detection
+
+    private WallType DetermineWallType(int x, int y)
+    {
+        // Check surrounding cells for floor and wall tiles
+        bool hasFloorLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Floor;
+        bool hasFloorRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Floor;
+        bool hasFloorTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Floor;
+        bool hasFloorBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Floor;
+
+        bool hasWallLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Wall;
+        bool hasWallRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Wall;
+        bool hasWallTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Wall;
+        bool hasWallBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Wall;
+
+        // Diagonal floor and wall checks
+        bool hasFloorTopLeft = IsCoordInBounds(x - 1, y + 1) && grid[x - 1, y + 1] == TileType.Floor;
+        bool hasFloorTopRight = IsCoordInBounds(x + 1, y + 1) && grid[x + 1, y + 1] == TileType.Floor;
+        bool hasFloorBottomLeft = IsCoordInBounds(x - 1, y - 1) && grid[x - 1, y - 1] == TileType.Floor;
+        bool hasFloorBottomRight = IsCoordInBounds(x + 1, y - 1) && grid[x + 1, y - 1] == TileType.Floor;
+
+        // INNER CORNERS - Two adjacent floors in an L shape
+        if (hasFloorLeft && hasFloorTop && !hasFloorRight && !hasFloorBottom)
+        {
+            return WallType.InnerTopLeft;
+        }
+        if (hasFloorRight && hasFloorTop && !hasFloorLeft && !hasFloorBottom)
+        {
+            return WallType.InnerTopRight;
+        }
+        if (hasFloorLeft && hasFloorBottom && !hasFloorRight && !hasFloorTop)
+        {
+            return WallType.InnerBottomLeft;
+        }
+        if (hasFloorRight && hasFloorBottom && !hasFloorLeft && !hasFloorTop)
+        {
+            return WallType.InnerBottomRight;
+        }
+
+        // OUTER CORNERS - Check for specific corner patterns
+        // Strategy: Check for L-shaped walls with no adjacent floors
+
+        // Outer Top-Left corner
+        if (hasWallLeft && hasWallTop &&
+            !hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
+        {
+            return WallType.OuterTopLeft;
+        }
+
+        // Outer Top-Right corner
+        if (hasWallRight && hasWallTop &&
+            !hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
+        {
+            return WallType.OuterTopRight;
+        }
+
+        // Outer Bottom-Left corner
+        if (hasWallLeft && hasWallBottom &&
+            !hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
+        {
+            return WallType.OuterBottomLeft;
+        }
+
+        // Outer Bottom-Right corner
+        if (hasWallRight && hasWallBottom &&
+            !hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
+        {
+            return WallType.OuterBottomRight;
+        }
+
+        // STRAIGHT WALLS - Single adjacent floor
+        if (hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
+        {
+            return WallType.Left;
+        }
+        if (hasFloorRight && !hasFloorLeft && !hasFloorTop && !hasFloorBottom)
+        {
+            return WallType.Right;
+        }
+        if (hasFloorTop && !hasFloorLeft && !hasFloorRight && !hasFloorBottom)
+        {
+            return WallType.Top;
+        }
+        if (hasFloorBottom && !hasFloorLeft && !hasFloorRight && !hasFloorTop)
+        {
+            return WallType.Bottom;
+        }
+
+        // Default case for all other wall patterns
+        return WallType.Default;
+    }
+
+    // --- Get Directional Tile with Rotation Support ---
+    // Replace this method in your HybridLevelGenerator.cs file
+
+    // --- Get Directional Tile with Rotation Support ---
+    // Replace this method in HybridLevelGenerator.cs
+    // This fixes the inverted mapping between detected wall types and assigned tiles
+
+    // Replace this method in HybridLevelGenerator.cs
+    // This fixes the inverted mapping for ALL tile types
+
+    // Update the GetDirectionalTileWithTransform method in your HybridLevelGenerator.cs file
+    // This ensures all corner types have the correct mapping
+
+    private void GetDirectionalTileWithTransform(WallType wallType, out TileBase tile, out Matrix4x4 transform)
+    {
+        transform = Matrix4x4.identity;
+        tile = wallTile;
+
+        DirectionalTile directionalTile = null;
+
+        // Debug the current wallType
+        Debug.Log($"Applying tile for wall type: {wallType}");
+
+        // Corrected mapping for ALL tiles with special focus on outer corners
+        switch (wallType)
+        {
+            // Basic Wall Directions 
+            case WallType.Left:
+                directionalTile = wallTileRight;
+                Debug.Log("Using Right wall tile for Left position");
+                break;
+            case WallType.Right:
+                directionalTile = wallTileLeft;
+                Debug.Log("Using Left wall tile for Right position");
+                break;
+            case WallType.Top:
+                directionalTile = wallTileBottom;
+                Debug.Log("Using Bottom wall tile for Top position");
+                break;
+            case WallType.Bottom:
+                directionalTile = wallTileTop;
+                Debug.Log("Using Top wall tile for Bottom position");
+                break;
+
+            // Inner Corners
+            case WallType.InnerTopLeft:
+                directionalTile = wallTileInnerBottomRight;
+                Debug.Log("Using Inner Bottom-Right tile for Inner Top-Left position");
+                break;
+            case WallType.InnerTopRight:
+                directionalTile = wallTileInnerBottomLeft;
+                Debug.Log("Using Inner Bottom-Left tile for Inner Top-Right position");
+                break;
+            case WallType.InnerBottomLeft:
+                directionalTile = wallTileInnerTopRight;
+                Debug.Log("Using Inner Top-Right tile for Inner Bottom-Left position");
+                break;
+            case WallType.InnerBottomRight:
+                directionalTile = wallTileInnerTopLeft;
+                Debug.Log("Using Inner Top-Left tile for Inner Bottom-Right position");
+                break;
+
+            // Outer Corners - Make sure these are properly mapped
+            case WallType.OuterTopLeft:
+                directionalTile = wallTileOuterBottomRight;
+                Debug.Log("Using Outer Bottom-Right tile for Outer Top-Left position");
+                // Validate the tile is assigned
+                if (directionalTile.tile == null)
+                    Debug.LogWarning("WARNING: Outer Bottom-Right tile is null!");
+                break;
+            case WallType.OuterTopRight:
+                directionalTile = wallTileOuterBottomLeft;
+                Debug.Log("Using Outer Bottom-Left tile for Outer Top-Right position");
+                // Validate the tile is assigned
+                if (directionalTile.tile == null)
+                    Debug.LogWarning("WARNING: Outer Bottom-Left tile is null!");
+                break;
+            case WallType.OuterBottomLeft:
+                directionalTile = wallTileOuterTopRight;
+                Debug.Log("Using Outer Top-Right tile for Outer Bottom-Left position");
+                // Validate the tile is assigned
+                if (directionalTile.tile == null)
+                    Debug.LogWarning("WARNING: Outer Top-Right tile is null!");
+                break;
+            case WallType.OuterBottomRight:
+                directionalTile = wallTileOuterTopLeft;
+                Debug.Log("Using Outer Top-Left tile for Outer Bottom-Right position");
+                // Validate the tile is assigned
+                if (directionalTile.tile == null)
+                    Debug.LogWarning("WARNING: Outer Top-Left tile is null!");
+                break;
+
+            default:
+                directionalTile = null;
+                Debug.Log("No specific tile mapping for this wall type, using default");
+                break;
+        }
+
+        // If directional tile is valid, apply its tile and transform
+        if (directionalTile != null && directionalTile.tile != null)
+        {
+            tile = directionalTile.tile;
+            transform = directionalTile.GetRotationMatrix();
+            Debug.Log($"Applied tile {tile.name} with rotation: {directionalTile.rotation}");
+        }
+        else
+        {
+            Debug.LogWarning($"No valid directional tile found for {wallType}, using default wall tile");
+        }
+    }
+
+    #endregion
+
+    #region Tilemap Application
+
+    private void PlaceDirectionalCornerTiles()
+    {
+        if (wallTileOuterTopLeft.tile == null || wallTileOuterTopRight.tile == null ||
+            wallTileOuterBottomLeft.tile == null || wallTileOuterBottomRight.tile == null)
+        {
+            Debug.LogWarning("Cannot place corner tiles: some outer corner tiles are not assigned!");
+            return;
+        }
+
+        int cornersPlaced = 0;
+
+        foreach (var roomBounds in placedRoomBounds.Values)
+        {
+            // Define exact corner positions
+            Vector3Int topLeft = new Vector3Int(roomBounds.xMin - 1, roomBounds.yMax, 0);
+            Vector3Int topRight = new Vector3Int(roomBounds.xMax, roomBounds.yMax, 0);
+            Vector3Int bottomLeft = new Vector3Int(roomBounds.xMin - 1, roomBounds.yMin - 1, 0);
+            Vector3Int bottomRight = new Vector3Int(roomBounds.xMax, roomBounds.yMin - 1, 0);
+
+            // Place top-left corner
+            if (IsCoordInBounds(topLeft.x, topLeft.y))
+            {
+                wallTilemap.SetTile(topLeft, wallTileOuterTopLeft.tile);
+                if (wallTileOuterTopLeft.rotation != TileRotation.None)
+                    wallTilemap.SetTransformMatrix(topLeft, wallTileOuterTopLeft.GetRotationMatrix());
+                cornersPlaced++;
+            }
+
+            // Place top-right corner
+            if (IsCoordInBounds(topRight.x, topRight.y))
+            {
+                wallTilemap.SetTile(topRight, wallTileOuterTopRight.tile);
+                if (wallTileOuterTopRight.rotation != TileRotation.None)
+                    wallTilemap.SetTransformMatrix(topRight, wallTileOuterTopRight.GetRotationMatrix());
+                cornersPlaced++;
+            }
+
+            // Place bottom-left corner
+            if (IsCoordInBounds(bottomLeft.x, bottomLeft.y))
+            {
+                wallTilemap.SetTile(bottomLeft, wallTileOuterBottomLeft.tile);
+                if (wallTileOuterBottomLeft.rotation != TileRotation.None)
+                    wallTilemap.SetTransformMatrix(bottomLeft, wallTileOuterBottomLeft.GetRotationMatrix());
+                cornersPlaced++;
+            }
+
+            // Place bottom-right corner
+            if (IsCoordInBounds(bottomRight.x, bottomRight.y))
+            {
+                wallTilemap.SetTile(bottomRight, wallTileOuterBottomRight.tile);
+                if (wallTileOuterBottomRight.rotation != TileRotation.None)
+                    wallTilemap.SetTransformMatrix(bottomRight, wallTileOuterBottomRight.GetRotationMatrix());
+                cornersPlaced++;
+            }
+        }
+
+        Debug.Log($"Placed {cornersPlaced} directional corner tiles");
+    }
+
+    private void PlaceRegularCornerTiles()
+    {
+        int cornersPlaced = 0;
+
+        foreach (var roomBounds in placedRoomBounds.Values)
+        {
+            // Define exact corner positions
+            Vector3Int topLeft = new Vector3Int(roomBounds.xMin - 1, roomBounds.yMax, 0);
+            Vector3Int topRight = new Vector3Int(roomBounds.xMax, roomBounds.yMax, 0);
+            Vector3Int bottomLeft = new Vector3Int(roomBounds.xMin - 1, roomBounds.yMin - 1, 0);
+            Vector3Int bottomRight = new Vector3Int(roomBounds.xMax, roomBounds.yMin - 1, 0);
+
+            // Array of corner positions
+            Vector3Int[] cornerPositions = { topLeft, topRight, bottomLeft, bottomRight };
+
+            foreach (var cornerPos in cornerPositions)
+            {
+                if (IsCoordInBounds(cornerPos.x, cornerPos.y))
+                {
+                    // Use regular wall tile or variant
+                    TileBase selectedTile = wallTile;
+                    if (wallTileVariants != null && wallTileVariants.Count > 0 &&
+                        pseudoRandom.NextDouble() < variantTileChance)
+                    {
+                        selectedTile = wallTileVariants[pseudoRandom.Next(wallTileVariants.Count)];
+                    }
+
+                    wallTilemap.SetTile(cornerPos, selectedTile);
+                    cornersPlaced++;
+                }
+            }
+        }
+
+        Debug.Log($"Placed {cornersPlaced} regular wall tiles at corners");
+    }
+
+
     private void ApplyTilesToTilemap()
-    { /* (Same as before using SetTilesBlock) */
-        if (groundTilemap == null || wallTilemap == null || floorTile == null || wallTile == null || grid == null) { Debug.LogError("Cannot apply tiles: Missing references or grid."); return; }
-        Debug.Log($"Applying grid ({levelWidth}x{levelHeight}) to tilemaps...");
-        List<Vector3Int> floorPos = new List<Vector3Int>(); List<TileBase> floorT = new List<TileBase>(); List<Vector3Int> wallPos = new List<Vector3Int>(); List<TileBase> wallT = new List<TileBase>();
+    {
+        // Early validation checks
+        if (groundTilemap == null || wallTilemap == null || floorTile == null || wallTile == null)
+        {
+            Debug.LogError("Required Tilemaps or Tiles are not assigned!");
+            return;
+        }
+
+        // Clearing existing tiles
+        groundTilemap.ClearAllTiles();
+        wallTilemap.ClearAllTiles();
+
+        // Create dictionaries for optimized batching
+        Dictionary<Vector3Int, TileBase> floorTilesToPlace = new Dictionary<Vector3Int, TileBase>();
+        Dictionary<Vector3Int, TileBase> wallTilesToPlace = new Dictionary<Vector3Int, TileBase>();
+        Dictionary<Vector3Int, Matrix4x4> wallTileTransforms = new Dictionary<Vector3Int, Matrix4x4>();
+
+        // First pass - identify wall types
+        Dictionary<Vector2Int, WallType> wallTypes = new Dictionary<Vector2Int, WallType>();
+        for (int x = 0; x < levelWidth; x++)
+        {
+            for (int y = 0; y < levelHeight; y++)
+            {
+                if (grid[x, y] == TileType.Wall && IsWallCandidate(x, y))
+                {
+                    Vector2Int pos = new Vector2Int(x, y);
+                    WallType type = DetermineWallType(x, y);
+                    wallTypes[pos] = type;
+                }
+            }
+        }
+
+        // Second pass - prepare tiles with transforms
         Vector3Int currentPos = Vector3Int.zero;
         for (int x = 0; x < levelWidth; x++)
         {
             for (int y = 0; y < levelHeight; y++)
             {
-                currentPos.x = x; currentPos.y = y; TileType type = grid[x, y];
-                if (type == TileType.Floor) { floorPos.Add(currentPos); floorT.Add(floorTile); }
-                else if (type == TileType.Wall && IsWallCandidate(x, y)) { wallPos.Add(currentPos); wallT.Add(wallTile); }
+                currentPos.x = x;
+                currentPos.y = y;
+                TileType tileType = grid[x, y];
+
+                // Skip level borders
+                if (x <= 0 || x >= levelWidth - 1 || y <= 0 || y >= levelHeight - 1)
+                    continue;
+
+                if (tileType == TileType.Floor)
+                {
+                    // Floor tile selection
+                    TileBase selectedTile = floorTile;
+                    if (floorTileVariants != null && floorTileVariants.Count > 0 &&
+                        pseudoRandom.NextDouble() < variantTileChance)
+                    {
+                        selectedTile = floorTileVariants[pseudoRandom.Next(floorTileVariants.Count)];
+                    }
+                    floorTilesToPlace[currentPos] = selectedTile;
+                }
+                else if (tileType == TileType.Wall && IsWallCandidate(x, y))
+                {
+                    // Skip corners for now if we're using directional walls
+                    bool isCorner = false;
+                    if (useDirectionalWalls)
+                    {
+                        foreach (var roomBounds in placedRoomBounds.Values)
+                        {
+                            // Check if this position is one of the four corner positions
+                            if ((x == roomBounds.xMin - 1 && y == roomBounds.yMax) ||    // Top-Left
+                                (x == roomBounds.xMax && y == roomBounds.yMax) ||        // Top-Right
+                                (x == roomBounds.xMin - 1 && y == roomBounds.yMin - 1) || // Bottom-Left
+                                (x == roomBounds.xMax && y == roomBounds.yMin - 1))      // Bottom-Right
+                            {
+                                isCorner = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (useDirectionalWalls && isCorner)
+                        continue; // Skip corners for now when DWT is ON
+
+                    TileBase selectedTile = wallTile;
+                    Matrix4x4 tileTransform = Matrix4x4.identity;
+
+                    // Wall tile selection with directional support
+                    if (useDirectionalWalls && wallTypes.TryGetValue(new Vector2Int(x, y), out WallType wallType))
+                    {
+                        GetDirectionalTileWithTransform(wallType, out selectedTile, out tileTransform);
+                    }
+                    else if (wallTileVariants != null && wallTileVariants.Count > 0 &&
+                             pseudoRandom.NextDouble() < variantTileChance)
+                    {
+                        selectedTile = wallTileVariants[pseudoRandom.Next(wallTileVariants.Count)];
+                    }
+
+                    wallTilesToPlace[currentPos] = selectedTile;
+
+                    // Store transform if not identity
+                    if (tileTransform != Matrix4x4.identity)
+                    {
+                        wallTileTransforms[currentPos] = tileTransform;
+                    }
+                }
             }
         }
-        BoundsInt bounds = new BoundsInt(0, 0, 0, levelWidth, levelHeight, 1);
-        TileBase[] nullTiles = Enumerable.Repeat<TileBase>(null, levelWidth * levelHeight).ToArray();
-        groundTilemap.SetTilesBlock(bounds, nullTiles); wallTilemap.SetTilesBlock(bounds, nullTiles); // Clear first
-        if (floorPos.Count > 0) groundTilemap.SetTiles(floorPos.ToArray(), floorT.ToArray());
-        if (wallPos.Count > 0) wallTilemap.SetTiles(wallPos.ToArray(), wallT.ToArray());
-        Debug.Log($"Finished applying tiles. Floors: {floorPos.Count}, Walls: {wallPos.Count}");
-    }
-    private bool IsWallCandidate(int x, int y)
-    { /* (Same as before) */
-        if (grid == null || !IsCoordInBounds(x, y) || grid[x, y] != TileType.Wall) return false;
-        for (int dx = -1; dx <= 1; dx++) { for (int dy = -1; dy <= 1; dy++) { if (dx == 0 && dy == 0) continue; int nx = x + dx; int ny = y + dy; if (IsCoordInBounds(nx, ny) && grid[nx, ny] == TileType.Floor) { return true; } } }
-        return false;
+
+        // Apply tiles to tilemaps
+        foreach (var kvp in floorTilesToPlace)
+        {
+            groundTilemap.SetTile(kvp.Key, kvp.Value);
+        }
+
+        foreach (var kvp in wallTilesToPlace)
+        {
+            wallTilemap.SetTile(kvp.Key, kvp.Value);
+
+            // Apply transform if exists
+            if (wallTileTransforms.TryGetValue(kvp.Key, out Matrix4x4 transform))
+            {
+                wallTilemap.SetTransformMatrix(kvp.Key, transform);
+            }
+        }
+
+        // Handle corners based on DWT setting
+        if (useDirectionalWalls)
+        {
+            // Place special corner tiles when DWT is ON
+            PlaceDirectionalCornerTiles();
+        }
+        else
+        {
+            // Place regular wall tiles at corners when DWT is OFF
+            PlaceRegularCornerTiles();
+        }
+
+        Debug.Log($"Finished applying tiles. Floors: {floorTilesToPlace.Count}, Walls: {wallTilesToPlace.Count}");
     }
 
-    // --- Entity Spawning ---
+    // Update the IsWallCandidate method in your HybridLevelGenerator.cs file
+    // This ensures all wall types, including corners, are properly detected
+
+    // Replace the IsWallCandidate method in your HybridLevelGenerator.cs file
+    // This uses a simpler approach to avoid detecting too many corners
+
+    // Replace the IsWallCandidate method in your HybridLevelGenerator.cs file
+
+    private bool IsWallCandidate(int x, int y)
+    {
+        // Skip if not in bounds or not a wall
+        if (!IsCoordInBounds(x, y) || grid[x, y] != TileType.Wall)
+            return false;
+
+        // Skip level borders
+        if (x <= 0 || x >= levelWidth - 1 || y <= 0 || y >= levelHeight - 1)
+            return false;
+
+        // Check for adjacent floor tiles
+        bool hasAdjacentFloor =
+            (IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Floor) ||
+            (IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Floor) ||
+            (IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Floor) ||
+            (IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Floor);
+
+        // Also include corner positions
+        bool isCornerPosition = false;
+        foreach (var roomBounds in placedRoomBounds.Values)
+        {
+            if ((x == roomBounds.xMin - 1 && y == roomBounds.yMax) ||    // Top-Left
+                (x == roomBounds.xMax && y == roomBounds.yMax) ||        // Top-Right
+                (x == roomBounds.xMin - 1 && y == roomBounds.yMin - 1) || // Bottom-Left
+                (x == roomBounds.xMax && y == roomBounds.yMin - 1))      // Bottom-Right
+            {
+                isCornerPosition = true;
+                break;
+            }
+        }
+
+        return hasAdjacentFloor || isCornerPosition;
+    }
+    #endregion
+
+    #region Entity Spawning
     private void SpawnEntities()
-    { /* (Same as before) */
+    {
         if (placedRoomBounds == null || placedRoomBounds.Count == 0) return; Debug.Log("Starting entity spawning..."); bool playerSpawned = false; List<Vector2Int> allFloor = new List<Vector2Int>();
         foreach (var kvp in placedRoomBounds) { allFloor.AddRange(GetFloorTilesInRect(kvp.Value)); }
         if (allFloor.Count == 0) { Debug.LogWarning("No floor tiles found, cannot spawn entities."); return; }
@@ -650,40 +1354,44 @@ public class HybridLevelGenerator : MonoBehaviour
         int enemiesTotal = enemiesPerRoom * placedRoomBounds.Count; int decorsTotal = decorationsPerRoom * placedRoomBounds.Count;
         SpawnPrefabs(enemyPrefab, enemiesTotal, allFloor, enemiesHolder); SpawnPrefabs(decorationPrefab, decorsTotal, allFloor, decorationsHolder); Debug.Log($"Entity spawning finished. Player Spawned: {playerSpawned}");
     }
+
     private void SpawnPrefabs(GameObject prefab, int maxCount, List<Vector2Int> availableSpots, Transform parentHolder)
-    { /* (Same as before) */
+    {
         if (prefab == null || availableSpots == null || parentHolder == null || availableSpots.Count == 0 || maxCount <= 0) return; int numSpawn = Mathf.Min(maxCount, availableSpots.Count); int spawned = 0;
         for (int i = 0; i < numSpawn; i++) { if (availableSpots.Count == 0) break; int idx = pseudoRandom.Next(availableSpots.Count); Vector2Int tile = availableSpots[idx]; availableSpots.RemoveAt(idx); Vector3 pos = GetWorldPosition(tile); Instantiate(prefab, pos, Quaternion.identity, parentHolder); spawned++; }
         Debug.Log($"Spawned {spawned} instances of {prefab.name} into {parentHolder.name}.");
     }
+    #endregion
 
-
-    // --- BSP Tree Logic ---
+    #region BSP Tree Logic
     private void RunBSPSplit()
-    { /* (Same as before) */
+    {
         if (bspLeaves == null) bspLeaves = new List<RectInt>(); bspLeaves.Clear(); if (pseudoRandom == null) Initialize();
         RectInt root = new RectInt(1, 1, levelWidth - 2, levelHeight - 2); if (root.width <= 0 || root.height <= 0) { Debug.LogError("Level Width/Height too small for BSP."); return; }
         var q = new Queue<KeyValuePair<RectInt, int>>(); q.Enqueue(new KeyValuePair<RectInt, int>(root, 0));
         while (q.Count > 0) { var pair = q.Dequeue(); RectInt node = pair.Key; int iter = pair.Value; if (iter >= maxIterations || ShouldStopSplitting(node)) { bspLeaves.Add(node); continue; } if (TrySplitNode(node, out RectInt nA, out RectInt nB)) { q.Enqueue(new KeyValuePair<RectInt, int>(nA, iter + 1)); q.Enqueue(new KeyValuePair<RectInt, int>(nB, iter + 1)); } else { bspLeaves.Add(node); } }
         Debug.Log($"BSP split complete. Generated {bspLeaves.Count} leaves.");
     }
+
     private bool ShouldStopSplitting(RectInt node)
-    { /* (Same as before) */
+    {
         int minSplitSize = minRoomSize + Mathf.Max(1, (int)roomPadding) * 2; if (node.width < minSplitSize * 2 && node.height < minSplitSize * 2) return true;
         float aspect = node.width <= 0 || node.height <= 0 ? 1f : (float)Mathf.Max(node.width, node.height) / Mathf.Max(1, Mathf.Min(node.width, node.height)); if (aspect > 4.0f) return true; return false;
     }
-    private bool TrySplitNode(RectInt node, out RectInt nodeA, out RectInt nodeB)
-    { /* (Same as before) */
-        nodeA = nodeB = RectInt.zero; bool canH = node.height >= (minRoomSize + (int)roomPadding) * 2 + 1; bool canV = node.width >= (minRoomSize + (int)roomPadding) * 2 + 1; if (!canH && !canV) return false; bool splitH; if (canH && !canV) splitH = true; else if (!canH && canV) splitH = false; else { bool prefH = (node.height > node.width * 1.2f); bool prefV = (node.width > node.height * 1.2f); if (prefH) splitH = true; else if (prefV) splitH = false; else splitH = pseudoRandom.Next(0, 2) == 0; }
-        int minSize = minRoomSize + (int)roomPadding; if (splitH) { int minY = node.y + minSize; int maxY = node.yMax - minSize; if (minY >= maxY) return false; int splitY = pseudoRandom.Next(minY, maxY); nodeA = new RectInt(node.x, node.y, node.width, splitY - node.y); nodeB = new RectInt(node.x, splitY, node.width, node.yMax - splitY); }
-        else { int minX = node.x + minSize; int maxX = node.xMax - minSize; if (minX >= maxX) return false; int splitX = pseudoRandom.Next(minX, maxX); nodeA = new RectInt(node.x, node.y, splitX - node.x, node.height); nodeB = new RectInt(splitX, node.y, node.xMax - splitX, node.height); }
+
+    private bool TrySplitNode(RectInt node, out RectInt nA, out RectInt nB)
+    {
+        nA = nB = RectInt.zero; bool canH = node.height >= (minRoomSize + (int)roomPadding) * 2 + 1; bool canV = node.width >= (minRoomSize + (int)roomPadding) * 2 + 1; if (!canH && !canV) return false; bool splitH; if (canH && !canV) splitH = true; else if (!canH && canV) splitH = false; else { bool prefH = (node.height > node.width * 1.2f); bool prefV = (node.width > node.height * 1.2f); if (prefH) splitH = true; else if (prefV) splitH = false; else splitH = pseudoRandom.Next(0, 2) == 0; }
+        int minSize = minRoomSize + (int)roomPadding; if (splitH) { int minY = node.y + minSize; int maxY = node.yMax - minSize; if (minY >= maxY) return false; int splitY = pseudoRandom.Next(minY, maxY); nA = new RectInt(node.x, node.y, node.width, splitY - node.y); nB = new RectInt(node.x, splitY, node.width, node.yMax - splitY); }
+        else { int minX = node.x + minSize; int maxX = node.xMax - minSize; if (minX >= maxX) return false; int splitX = pseudoRandom.Next(minX, maxX); nA = new RectInt(node.x, node.y, splitX - node.x, node.height); nB = new RectInt(splitX, node.y, node.xMax - splitX, node.height); }
         return true;
     }
 
 
-    // --- Utility Functions ---
+
+    #region Utility Functions
     private Transform CreateOrFindParent(string parentName)
-    { /* (Same as before) */
+    {
         Transform parent = transform.Find(parentName); if (parent != null) return parent;
         GameObject go = GameObject.Find(parentName); if (go != null) return go.transform;
         go = new GameObject(parentName); go.transform.SetParent(transform); go.transform.localPosition = Vector3.zero; return go.transform;
@@ -737,5 +1445,6 @@ public class HybridLevelGenerator : MonoBehaviour
             Debug.LogWarning($"[DestroySceneObjectAndChildren] Object named '{objectName}' not found. Cannot destroy.");
         }
     }
-
-} // --- End of HybridLevelGenerator Class ---
+    #endregion
+    #endregion
+}

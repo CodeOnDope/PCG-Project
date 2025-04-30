@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCG Level Generator - Documentation</title>
+  <style>
+    :root {
+      --primary-color: #3772ff;
+      --secondary-color: #36b37e;
+      --dark-bg: #222639;
+      --light-bg: #f7f9fc;
+      --text-color: #333;
+      --text-light: #f7f9fc;
+      --header-height: 60px;
+      --sidebar-width: 280px;
+      --border-radius: 6px;
+      --code-bg: #272822;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text-color);
+      line-height: 1.6;
+      background-color: var(--light-bg);
+    }
+    
+    a {
+      color: var(--primary-color);
+      text-decoration: none;
+    }
+    
+    a:hover {
+      text-decoration: underline;
+    }
+    
+    /* Header */
+    header {
+      background-color: var(--dark-bg);
+      height: var(--header-height);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 30px;
+      position: fixed;
+      top: 0;
+      width: 100%;
+      z-index: 1000;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    .logo {
+      color: var(--text-light);
+      font-size: 1.5rem;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+    }
+    
+    .logo img {
+      height: 32px;
+      margin-right: 10px;
+    }
+    
+    .top-nav {
+      display: flex;
+    }
+    
+    .top-nav a {
+      color: var(--text-light);
+      margin-left: 25px;
+      opacity: 0.8;
+      transition: opacity 0.3s;
+    }
+    
+    .top-nav a:hover {
+      opacity: 1;
+      text-decoration: none;
+    }
+    
+    /* Main Layout */
+    .container {
+      display: flex;
+      margin-top: var(--header-height);
+    }
+    
+    /* Sidebar */
+    .sidebar {
+      width: var(--sidebar-width);
+      background-color: #fff;
+      height: calc(100vh - var(--header-height));
+      position: fixed;
+      overflow-y: auto;
+      border-right: 1px solid #e9e9e9;
+      padding: 20px 0;
+    }
+    
+    .menu-section {
+      margin-bottom: 25px;
+    }
+    
+    .menu-section h3 {
+      padding: 10px 25px;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      color: #666;
+      letter-spacing: 1px;
+    }
+    
+    .menu-links {
+      list-style: none;
+    }
+    
+    .menu-links li {
+      padding: 10px 25px 10px 35px;
+      border-left: 3px solid transparent;
+    }
+    
+    .menu-links li.active {
+      background-color: rgba(55, 114, 255, 0.08);
+      border-left: 3px solid var(--primary-color);
+    }
+    
+    .menu-links li a {
+      color: var(--text-color);
+      display: block;
+      transition: color 0.3s;
+    }
+    
+    .menu-links li a:hover {
+      color: var(--primary-color);
+      text-decoration: none;
+    }
+    
+    .menu-links li.active a {
+      color: var(--primary-color);
+      font-weight: 500;
+    }
+    
+    /* Content */
+    .content {
+      margin-left: var(--sidebar-width);
+      padding: 40px;
+      max-width: calc(100% - var(--sidebar-width));
+    }
+    
+    .page {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    
+    .page h1 {
+      margin-bottom: 30px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+      color: #1a1a1a;
+    }
+    
+    .page h2 {
+      margin: 40px 0 20px;
+      color: #333;
+    }
+    
+    .page h3 {
+      margin: 30px 0 15px;
+      color: #444;
+    }
+    
+    .page p, .page ul, .page ol {
+      margin-bottom: 20px;
+    }
+    
+    .page ul, .page ol {
+      padding-left: 30px;
+    }
+    
+    .page img {
+      max-width: 100%;
+      border-radius: var(--border-radius);
+      margin: 20px 0;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    }
+    
+    .note {
+      background-color: rgba(55, 114, 255, 0.1);
+      border-left: 4px solid var(--primary-color);
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    }
+    
+    .warning {
+      background-color: rgba(255, 102, 26, 0.1);
+      border-left: 4px solid #ff661a;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 0 var(--border-radius) var(--border-radius) 0;
+    }
+    
+    pre {
+      background-color: var(--code-bg);
+      color: #f8f8f2;
+      padding: 20px;
+      border-radius: var(--border-radius);
+      overflow-x: auto;
+      margin: 20px 0;
+    }
+    
+    code {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9em;
+    }
+    
+    .inline-code {
+      background-color: rgba(0, 0, 0, 0.05);
+      padding: 2px 5px;
+      border-radius: 3px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9em;
+    }
+    
+    /* Screenshots Gallery */
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 20px;
+      margin: 30px 0;
+    }
+    
+    .gallery-item img {
+      width: 100%;
+      height: auto;
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+    
+    .gallery-item img:hover {
+      transform: scale(1.02);
+    }
+    
+    /* Version History */
+    .version-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+    }
+    
+    .version-table th, .version-table td {
+      padding: 12px 15px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .version-table th {
+      background-color: #f5f7fa;
+      font-weight: 600;
+    }
+    
+    .version-tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      background-color: var(--secondary-color);
+      color: white;
+    }
+    
+    /* Mobile Responsiveness */
+    @media (max-width: 768px) {
+      .sidebar {
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 100;
+      }
+      
+      .sidebar.active {
+        transform: translateX(0);
+      }
+      
+      .content {
+        margin-left: 0;
+        max-width: 100%;
+        padding: 20px;
+      }
+      
+      .menu-toggle {
+        display: block;
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: var(--primary-color);
+        color: white;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        z-index: 101;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <img src="logo-placeholder.png" alt="PCG Level Generator Logo">
+      PCG Level Generator
+    </div>
+    <nav class="top-nav">
+      <a href="https://github.com/yourusername/PCGLevelGenerator" target="_blank">GitHub</a>
+      <a href="#support">Support</a>
+      <a href="https://assetstore.unity.com" target="_blank">Asset Store</a>
+    </nav>
+  </header>
+
+  <!-- Main Container -->
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="menu-section">
+        <h3>Getting Started</h3>
+        <ul class="menu-links">
+          <li class="active"><a href="#introduction">Introduction</a></li>
+          <li><a href="#installation">Installation</a></li>
+          <li><a href="#quick-start">Quick Start</a></li>
+          <li><a href="#system-requirements">System Requirements</a></li>
+        </ul>
+      </div>
+      
+      <div class="menu-section">
+        <h3>Generation Modes</h3>
+        <ul class="menu-links">
+          <li><a href="#fully-procedural">Fully Procedural</a></li>
+          <li><a href="#hybrid-procedural">Hybrid Procedural</a></li>
+          <li><a href="#user-defined">User-Defined Layout</a></li>
+        </ul>
+      </div>
+      
+      <div class="menu-section">
+        <h3>Features</h3>
+        <ul class="menu-links">
+          <li><a href="#visual-designer">Visual Level Designer</a></li>
+          <li><a href="#bsp-algorithm">BSP Algorithm</a></li>
+          <li><a href="#room-templates">Room Templates</a></li>
+          <li><a href="#entity-placement">Entity Placement</a></li>
+          <li><a href="#tilemap-integration">Tilemap Integration</a></li>
+        </ul>
+      </div>
+      
+      <div class="menu-section">
+        <h3>API Reference</h3>
+        <ul class="menu-links">
+          <li><a href="#hybridlevelgenerator">HybridLevelGenerator</a></li>
+          <li><a href="#roomnode">RoomNode</a></li>
+          <li><a href="#levelgenerationtypes">LevelGeneration Types</a></li>
+        </ul>
+      </div>
+      
+      <div class="menu-section">
+        <h3>Examples & Tutorials</h3>
+        <ul class="menu-links">
+          <li><a href="#city-generation">City Generation</a></li>
+          <li><a href="#dungeon-generation">Dungeon Generation</a></li>
+          <li><a href="#custom-templates">Creating Custom Templates</a></li>
+        </ul>
+      </div>
+      
+      <div class="menu-section">
+        <h3>Advanced</h3>
+        <ul class="menu-links">
+          <li><a href="#custom-algorithms">Custom Algorithms</a></li>
+          <li><a href="#pipeline-extension">Extending Generation Pipeline</a></li>
+          <li><a href="#custom-tile-rules">Custom Tile Rules</a></li>
+        </ul>
+      </div>
+      
+      <div class="menu-section">
+        <h3>Resources</h3>
+        <ul class="menu-links">
+          <li><a href="#release-notes">Release Notes</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="#troubleshooting">Troubleshooting</a></li>
+          <li><a href="#support">Support</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- Content -->
+    <main class="content">
+      <div class="page">
+        <!-- Introduction -->
+        <section id="introduction">
+          <h1>PCG Level Generator Documentation</h1>
+          
+          <p>Welcome to the PCG Level Generator documentation. This powerful Unity asset provides an intuitive system for procedural level generation in 2D games.</p>
+          
+          <p>With three distinct generation approaches, flexible customization options, and a visual editor, PCG Level Generator is designed to save developers time while creating engaging and dynamic game worlds.</p>
+          
+          <div class="note">
+            <strong>Key Features:</strong>
+            <ul>
+              <li>Three generation modes: Fully Procedural, Hybrid Procedural, and User-Defined Layout</li>
+              <li>Visual Level Designer for custom layouts</li>
+              <li>BSP (Binary Space Partitioning) algorithm for natural-looking spaces</li>
+              <li>Room templates support for consistent designs</li>
+              <li>Automatic entity placement (players, enemies, decorations)</li>
+              <li>Full Unity Tilemap integration</li>
+              <li>One-click setup (ready in 10 seconds)</li>
+            </ul>
+          </div>
+          
+          <img src="main-screenshot.png" alt="PCG Level Generator Screenshot">
+        </section>
+        
+        <!-- Installation -->
+        <section id="installation">
+          <h2>Installation</h2>
+          
+          <p>There are two ways to install PCG Level Generator in your Unity project:</p>
+          
+          <h3>Method 1: Unity Asset Store</h3>
+          <ol>
+            <li>Purchase PCG Level Generator from the <a href="https://assetstore.unity.com">Unity Asset Store</a></li>
+            <li>Open your Unity project and go to Window > Package Manager</li>
+            <li>Select "My Assets" from the Packages dropdown</li>
+            <li>Find PCG Level Generator and click "Download" then "Import"</li>
+            <li>In the Import window, ensure all components are selected and click "Import"</li>
+          </ol>
+          
+          <h3>Method 2: Manual Import</h3>
+          <ol>
+            <li>Download the PCG Level Generator .unitypackage file from your Asset Store downloads</li>
+            <li>Open your Unity project</li>
+            <li>Go to Assets > Import Package > Custom Package...</li>
+            <li>Locate and select the downloaded .unitypackage file</li>
+            <li>Ensure all components are selected in the Import window and click "Import"</li>
+          </ol>
+          
+          <div class="note">
+            <strong>Note:</strong> After importing, you'll find the PCG Level Generator folder in your project's Assets directory. The package is fully self-contained and doesn't add any code outside its folder.
+          </div>
+        </section>
+        
+        <!-- Quick Start -->
+        <section id="quick-start">
+          <h2>Quick Start</h2>
+          
+          <p>Get up and running with PCG Level Generator in just a few steps:</p>
+          
+          <h3>One-Click Setup</h3>
+          <ol>
+            <li>Open your Unity scene</li>
+            <li>Go to Tools > PCG Level Generator > One-Click Setup</li>
+            <li>The system will create all required components in your scene</li>
+            <li>Select the newly created HybridLevelGenerator GameObject</li>
+            <li>In the Inspector, choose a generation mode</li>
+            <li>Click "Generate Level" to create your first procedural level</li>
+          </ol>
+          
+          <div class="note">
+            <strong>Pro Tip:</strong> For quick iteration, you can adjust settings in the Inspector and regenerate the level at any time by clicking "Generate Level" again.
+          </div>
+          
+          <h3>Working with the Visual Designer</h3>
+          <p>If you prefer to design your level layout manually:</p>
+          
+          <ol>
+            <li>Go to Tools > PCG Level Generator > Welcome Screen</li>
+            <li>Click "Open Visual Level Designer"</li>
+            <li>Use the designer to create and connect rooms</li>
+            <li>Click "Create Scene Objects & Generate" to implement your design</li>
+          </ol>
+          
+          <div class="warning">
+            <strong>Important:</strong> Make sure your scene has a Grid GameObject with appropriate Tilemap components before generating levels. The one-click setup takes care of this automatically.
+          </div>
+        </section>
+        
+        <!-- System Requirements -->
+        <section id="system-requirements">
+          <h2>System Requirements</h2>
+          
+          <p>PCG Level Generator is designed to be lightweight and compatible with a wide range of Unity versions and platforms.</p>
+          
+          <h3>Unity Version</h3>
+          <ul>
+            <li>Unity 2020.3 LTS or newer</li>
+            <li>Fully tested on Unity 2020.3 LTS, 2021.3 LTS, and 2022.3 LTS</li>
+          </ul>
+          
+          <h3>Required Packages</h3>
+          <ul>
+            <li>2D Tilemap Editor (included in Unity's 2D packages)</li>
+            <li>2D Tilemap Extras (recommended but optional)</li>
+          </ul>
+          
+          <h3>Supported Platforms</h3>
+          <p>PCG Level Generator works on all platforms that Unity supports. It has been tested on:</p>
+          <ul>
+            <li>Windows, Mac, and Linux (for development)</li>
+            <li>iOS and Android</li>
+            <li>WebGL</li>
+            <li>Consoles (Switch, PlayStation, Xbox)</li>
+          </ul>
+          
+          <h3>Performance Considerations</h3>
+          <p>The generator is optimized for runtime and editor use. Generation time depends on level size and complexity:</p>
+          <ul>
+            <li>Small levels (50x50): ~0.1 seconds</li>
+            <li>Medium levels (100x100): ~0.3 seconds</li>
+            <li>Large levels (200x200): ~1 second</li>
+          </ul>
+          
+          <div class="note">
+            <strong>Note:</strong> Generation is typically performed at level load time or during scene transitions, so it doesn't affect gameplay performance.
+          </div>
+        </section>
+        
+        <!-- Fully Procedural Mode -->
+        <section id="fully-procedural">
+          <h2>Fully Procedural Mode</h2>
+          
+          <p>The Fully Procedural mode uses Binary Space Partitioning (BSP) to generate levels automatically with rectangular rooms and corridors.</p>
+          
+          <h3>How It Works</h3>
+          <ol>
+            <li>The generator divides the available space using BSP</li>
+            <li>Rectangular rooms are placed within each partition</li>
+            <li>Corridors are generated to connect rooms using a minimum spanning tree algorithm</li>
+            <li>Tiles are applied to the grid based on the generated layout</li>
+            <li>Entities (player, enemies, decorations) are placed in appropriate locations</li>
+          </ol>
+          
+          <h3>Key Settings</h3>
+          <ul>
+            <li><strong>Level Width/Height:</strong> The maximum dimensions of the generated level</li>
+            <li><strong>Min Room Size:</strong> Minimum width/height for generated rooms</li>
+            <li><strong>Max Iterations:</strong> Number of BSP splits to perform</li>
+            <li><strong>Room Padding:</strong> Minimum space between rooms</li>
+            <li><strong>Corridor Width:</strong> Width of corridors connecting rooms</li>
+          </ul>
+          
+          <img src="fully-procedural-example.png" alt="Fully Procedural Mode Example">
+          
+          <div class="note">
+            <strong>Best For:</strong> Classic roguelike dungeons, caves, office buildings, or any environment with regular rectangular rooms.
+          </div>
+        </section>
+        
+        <!-- Hybrid Procedural Mode -->
+        <section id="hybrid-procedural">
+          <h2>Hybrid Procedural Mode</h2>
+          
+          <p>Hybrid Procedural mode combines BSP splitting with varied room types including rectangles, L-shapes, and custom room templates for more diverse and interesting levels.</p>
+          
+          <h3>How It Works</h3>
+          <ol>
+            <li>The generator divides the available space using BSP</li>
+            <li>For each partition, it randomly chooses a room type (rectangle, L-shape, or template)</li>
+            <li>Rooms are placed according to their type-specific rules</li>
+            <li>Corridors are generated to connect all rooms</li>
+            <li>Tiles and entities are placed based on the generated layout</li>
+          </ol>
+          
+          <h3>Key Settings</h3>
+          <ul>
+            <li><strong>L-Shape Probability:</strong> Chance (0-1) that a room will be L-shaped</li>
+            <li><strong>Min/Max L Leg Ratio:</strong> Controls the proportions of L-shaped rooms</li>
+            <li><strong>Room Template Probability:</strong> Chance (0-1) that a room will use a template</li>
+            <li><strong>Room Template Prefabs:</strong> List of prefabs to use as room templates</li>
+          </ul>
+          
+          <img src="hybrid-procedural-example.png" alt="Hybrid Procedural Mode Example">
+          
+          <div class="note">
+            <strong>Best For:</strong> Games that need varied architecture like RPGs, adventure games, or strategy games with diverse environments.
+          </div>
+        </section>
+        
+        <!-- User-Defined Layout Mode -->
+        <section id="user-defined">
+          <h2>User-Defined Layout Mode</h2>
+          
+          <p>User-Defined Layout mode gives you complete control over level design through the Visual Level Designer, while still handling the technical aspects of level creation automatically.</p>
+          
+          <h3>How It Works</h3>
+          <ol>
+            <li>Design your level layout using the Visual Level Designer</li>
+            <li>Place and connect rooms of different types (rectangle, L-shape, template)</li>
+            <li>Set room properties (size, templates, connections)</li>
+            <li>Create Scene Objects to generate RoomNode components</li>
+            <li>Generate the level based on your design</li>
+          </ol>
+          
+          <h3>Key Features</h3>
+          <ul>
+            <li><strong>Visual Editor:</strong> Intuitive drag-and-drop interface</li>
+            <li><strong>Room Types:</strong> Choose from rectangle, L-shape, or template rooms</li>
+            <li><strong>Connections:</strong> Define corridors between rooms</li>
+            <li><strong>Properties:</strong> Set size and appearance for each room</li>
+            <li><strong>Scene Integration:</strong> Converts visual design to Unity scene objects</li>
+          </ul>
+          
+          <img src="user-defined-example.png" alt="User-Defined Layout Mode Example">
+          
+          <div class="note">
+            <strong>Best For:</strong> Hand-crafted level designs, puzzle games, tutorial levels, or any scenario where you need precise control over the layout.
+          </div>
+        </section>
+        
+        <!-- Further sections would continue here ... -->
+        
+        <!-- Release Notes -->
+        <section id="release-notes">
+          <h2>Release Notes</h2>
+          
+          <table class="version-table">
+            <tr>
+              <th>Version</th>
+              <th>Date</th>
+              <th>Changes</th>
+            </tr>
+            <tr>
+              <td><span class="version-tag">1.0.0</span></td>
+              <td>April 28, 2025</td>
+              <td>
+                <ul>
+                  <li>Initial release</li>
+                  <li>Three generation modes: Fully Procedural, Hybrid Procedural, and User-Defined Layout</li>
+                  <li>Visual Level Designer</li>
+                  <li>Unity Tilemap integration</li>
+                  <li>Entity placement system</li>
+                  <li>One-click setup</li>
+                </ul>
+              </td>
+            </tr>
+          </table>
+        </section>
+        
+        <!-- Support Section -->
+        <section id="support">
+          <h2>Support</h2>
+          
+          <p>We're committed to providing excellent support for PCG Level Generator. If you encounter any issues or have questions, please reach out to us:</p>
+          
+          <h3>Contact Options</h3>
+          <ul>
+            <li><strong>Email:</strong> <a href="mailto:support@pcglevelgenerator.com">support@pcglevelgenerator.com</a></li>
+            <li><strong>Unity Forums:</strong> <a href="https://forum.unity.com" target="_blank">Unity Forums Thread</a></li>
+            <li><strong>GitHub Issues:</strong> <a href="https://github.com/yourusername/PCGLevelGenerator/issues" target="_blank">Submit an Issue</a></li>
+          </ul>
+          
+          <h3>Support Hours</h3>
+          <p>We typically respond to support requests within 48 hours during business days (Monday-Friday).</p>
+          
+          <div class="note">
+            <strong>For Faster Support:</strong> When reporting an issue, please include your Unity version, PCG Level Generator version, and steps to reproduce the problem.
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Simple script for mobile menu toggle
+    document.addEventListener('DOMContentLoaded', function() {
+      // Create mobile menu toggle button
+      const menuToggle = document.createElement('button');
+      menuToggle.className = 'menu-toggle';
+      menuToggle.innerHTML = '☰';
+      document.body.appendChild(menuToggle);
+      
+      // Add toggle functionality
+      menuToggle.addEventListener('click', function() {
+        document.querySelector('.sidebar').classList.toggle('active');
+      });
+      
+      // Handle menu item clicks for mobile
+      const menuLinks = document.querySelectorAll('.menu-links li a');
+      menuLinks.forEach(link => {
+        link.addEventListener('click', function() {
+          if (window.innerWidth <= 768) {
+            document.querySelector('.sidebar').classList.remove('active');
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>
