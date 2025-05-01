@@ -862,94 +862,152 @@ public class HybridLevelGenerator : MonoBehaviour
     // Replace the DetermineWallType method in your HybridLevelGenerator.cs file
     // This provides the most accurate corner detection
 
+    // First, improve the wall type detection to better handle corridor junctions
+    // First, improve the wall type detection to better handle corridor junctions
     private WallType DetermineWallType(int x, int y)
+{
+    // Check surrounding cells for floor and wall tiles
+    bool hasFloorLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Floor;
+    bool hasFloorRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Floor;
+    bool hasFloorTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Floor;
+    bool hasFloorBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Floor;
+
+    // Count adjacent floor tiles for junction detection
+    int floorCount = 0;
+    if (hasFloorLeft) floorCount++;
+    if (hasFloorRight) floorCount++;
+    if (hasFloorTop) floorCount++;
+    if (hasFloorBottom) floorCount++;
+
+    // INNER CORNERS - Two adjacent floors in an L shape
+    if (hasFloorLeft && hasFloorTop && !hasFloorRight && !hasFloorBottom)
+        return WallType.InnerTopLeft;
+    if (hasFloorRight && hasFloorTop && !hasFloorLeft && !hasFloorBottom)
+        return WallType.InnerTopRight;
+    if (hasFloorLeft && hasFloorBottom && !hasFloorRight && !hasFloorTop)
+        return WallType.InnerBottomLeft;
+    if (hasFloorRight && hasFloorBottom && !hasFloorLeft && !hasFloorTop)
+        return WallType.InnerBottomRight;
+
+    // STRAIGHT WALLS - Floor on one side
+    if (hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
+        return WallType.Left;
+    if (hasFloorRight && !hasFloorLeft && !hasFloorTop && !hasFloorBottom)
+        return WallType.Right;
+    if (hasFloorTop && !hasFloorLeft && !hasFloorRight && !hasFloorBottom)
+        return WallType.Top;
+    if (hasFloorBottom && !hasFloorLeft && !hasFloorRight && !hasFloorTop)
+        return WallType.Bottom;
+
+    // CORRIDOR JUNCTIONS - Handle T-junctions and other multi-floor cases
+    if (floorCount >= 2)
     {
-        // Check surrounding cells for floor and wall tiles
-        bool hasFloorLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Floor;
-        bool hasFloorRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Floor;
-        bool hasFloorTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Floor;
-        bool hasFloorBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Floor;
-
-        bool hasWallLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Wall;
-        bool hasWallRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Wall;
-        bool hasWallTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Wall;
-        bool hasWallBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Wall;
-
-        // Diagonal floor and wall checks
-        bool hasFloorTopLeft = IsCoordInBounds(x - 1, y + 1) && grid[x - 1, y + 1] == TileType.Floor;
-        bool hasFloorTopRight = IsCoordInBounds(x + 1, y + 1) && grid[x + 1, y + 1] == TileType.Floor;
-        bool hasFloorBottomLeft = IsCoordInBounds(x - 1, y - 1) && grid[x - 1, y - 1] == TileType.Floor;
-        bool hasFloorBottomRight = IsCoordInBounds(x + 1, y - 1) && grid[x + 1, y - 1] == TileType.Floor;
-
-        // INNER CORNERS - Two adjacent floors in an L shape
-        if (hasFloorLeft && hasFloorTop && !hasFloorRight && !hasFloorBottom)
-        {
-            return WallType.InnerTopLeft;
-        }
-        if (hasFloorRight && hasFloorTop && !hasFloorLeft && !hasFloorBottom)
-        {
-            return WallType.InnerTopRight;
-        }
-        if (hasFloorLeft && hasFloorBottom && !hasFloorRight && !hasFloorTop)
-        {
-            return WallType.InnerBottomLeft;
-        }
-        if (hasFloorRight && hasFloorBottom && !hasFloorLeft && !hasFloorTop)
-        {
-            return WallType.InnerBottomRight;
-        }
-
-        // OUTER CORNERS - Check for specific corner patterns
-        // Strategy: Check for L-shaped walls with no adjacent floors
-
-        // Outer Top-Left corner
-        if (hasWallLeft && hasWallTop &&
-            !hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
-        {
-            return WallType.OuterTopLeft;
-        }
-
-        // Outer Top-Right corner
-        if (hasWallRight && hasWallTop &&
-            !hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
-        {
-            return WallType.OuterTopRight;
-        }
-
-        // Outer Bottom-Left corner
-        if (hasWallLeft && hasWallBottom &&
-            !hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
-        {
-            return WallType.OuterBottomLeft;
-        }
-
-        // Outer Bottom-Right corner
-        if (hasWallRight && hasWallBottom &&
-            !hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
-        {
-            return WallType.OuterBottomRight;
-        }
-
-        // STRAIGHT WALLS - Single adjacent floor
-        if (hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
-        {
-            return WallType.Left;
-        }
-        if (hasFloorRight && !hasFloorLeft && !hasFloorTop && !hasFloorBottom)
-        {
-            return WallType.Right;
-        }
-        if (hasFloorTop && !hasFloorLeft && !hasFloorRight && !hasFloorBottom)
-        {
-            return WallType.Top;
-        }
-        if (hasFloorBottom && !hasFloorLeft && !hasFloorRight && !hasFloorTop)
-        {
+        // T-junction cases
+        if (hasFloorLeft && hasFloorRight && hasFloorBottom && !hasFloorTop)
             return WallType.Bottom;
-        }
+        if (hasFloorLeft && hasFloorRight && hasFloorTop && !hasFloorBottom)
+            return WallType.Top;
+        if (hasFloorLeft && hasFloorTop && hasFloorBottom && !hasFloorRight)
+            return WallType.Left;
+        if (hasFloorRight && hasFloorTop && hasFloorBottom && !hasFloorLeft)
+            return WallType.Right;
 
-        // Default case for all other wall patterns
-        return WallType.Default;
+        // Determine best match for other cases with multiple floors
+        if (!hasFloorTop) return WallType.Bottom;
+        if (!hasFloorBottom) return WallType.Top;
+        if (!hasFloorLeft) return WallType.Right;
+        if (!hasFloorRight) return WallType.Left;
+    }
+
+    // Use simple outer corner detection from surrounding walls
+    bool hasWallLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Wall;
+    bool hasWallRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Wall;
+    bool hasWallTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Wall;
+    bool hasWallBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Wall;
+
+    // OUTER CORNERS - Detect based on adjacent walls    
+    if (hasWallLeft && hasWallTop) return WallType.OuterTopLeft;
+    if (hasWallRight && hasWallTop) return WallType.OuterTopRight;
+    if (hasWallLeft && hasWallBottom) return WallType.OuterBottomLeft;
+    if (hasWallRight && hasWallBottom) return WallType.OuterBottomRight;
+
+    // Default case
+    return WallType.Default;
+}
+
+
+    private void FixCorridorJunctions()
+    {
+        for (int x = 1; x < levelWidth - 1; x++)
+        {
+            for (int y = 1; y < levelHeight - 1; y++)
+            {
+                if (grid[x, y] == TileType.Wall)
+                {
+                    // Count adjacent floor tiles
+                    int floorCount = 0;
+                    bool hasFloorLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Floor;
+                    bool hasFloorRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Floor;
+                    bool hasFloorTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Floor;
+                    bool hasFloorBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Floor;
+
+                    if (hasFloorLeft) floorCount++;
+                    if (hasFloorRight) floorCount++;
+                    if (hasFloorTop) floorCount++;
+                    if (hasFloorBottom) floorCount++;
+
+                    // Only fix walls with 2 or more adjacent floor tiles
+                    if (floorCount >= 2)
+                    {
+                        // Get the proper wall type for this junction
+                        WallType wallType = DetermineWallType(x, y);
+                        TileBase tile;
+                        Matrix4x4 transform;
+                        GetDirectionalTileWithTransform(wallType, out tile, out transform);
+
+                        // Apply the correct tile
+                        Vector3Int pos = new Vector3Int(x, y, 0);
+                        wallTilemap.SetTile(pos, tile);
+                        if (transform != Matrix4x4.identity)
+                        {
+                            wallTilemap.SetTransformMatrix(pos, transform);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private bool IsCorridorJunction(int x, int y)
+    {
+        // Count adjacent floor tiles
+        int floorCount = 0;
+        if (IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Floor) floorCount++;
+        if (IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Floor) floorCount++;
+        if (IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Floor) floorCount++;
+        if (IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Floor) floorCount++;
+
+        // Junction typically has 2 or 3 adjacent floor tiles
+        return floorCount >= 2 && grid[x, y] == TileType.Wall;
+    }
+
+    private void ApplyJunctionWallTile(int x, int y)
+    {
+        // Determine the type of junction
+        WallType wallType = DetermineWallType(x, y);
+        TileBase tile;
+        Matrix4x4 transform;
+
+        GetDirectionalTileWithTransform(wallType, out tile, out transform);
+
+        // Apply the tile
+        Vector3Int pos = new Vector3Int(x, y, 0);
+        wallTilemap.SetTile(pos, tile);
+
+        if (transform != Matrix4x4.identity)
+        {
+            wallTilemap.SetTransformMatrix(pos, transform);
+        }
     }
 
     // --- Get Directional Tile with Rotation Support ---
@@ -970,96 +1028,83 @@ public class HybridLevelGenerator : MonoBehaviour
         transform = Matrix4x4.identity;
         tile = wallTile;
 
-        DirectionalTile directionalTile = null;
-
-        // Debug the current wallType
-        Debug.Log($"Applying tile for wall type: {wallType}");
-
-        // Corrected mapping for ALL tiles with special focus on outer corners
+        // IMPORTANT: Direct mapping based on your inspector setup
+        // DO NOT invert the mappings anymore
         switch (wallType)
         {
-            // Basic Wall Directions 
+            // Basic Wall Directions - DIRECT MAPPING
             case WallType.Left:
-                directionalTile = wallTileRight;
-                Debug.Log("Using Right wall tile for Left position");
+                tile = wallTileLeft.tile;
+                transform = wallTileLeft.GetRotationMatrix();
+                Debug.Log($"LEFT wall - using LEFT tile: {tile?.name ?? "null"}");
                 break;
             case WallType.Right:
-                directionalTile = wallTileLeft;
-                Debug.Log("Using Left wall tile for Right position");
+                tile = wallTileRight.tile;
+                transform = wallTileRight.GetRotationMatrix();
+                Debug.Log($"RIGHT wall - using RIGHT tile: {tile?.name ?? "null"}");
                 break;
             case WallType.Top:
-                directionalTile = wallTileBottom;
-                Debug.Log("Using Bottom wall tile for Top position");
+                tile = wallTileTop.tile;
+                transform = wallTileTop.GetRotationMatrix();
+                Debug.Log($"TOP wall - using TOP tile: {tile?.name ?? "null"}");
                 break;
             case WallType.Bottom:
-                directionalTile = wallTileTop;
-                Debug.Log("Using Top wall tile for Bottom position");
+                tile = wallTileBottom.tile;
+                transform = wallTileBottom.GetRotationMatrix();
+                Debug.Log($"BOTTOM wall - using BOTTOM tile: {tile?.name ?? "null"}");
                 break;
 
-            // Inner Corners
+            // Inner Corners - DIRECT MAPPING
             case WallType.InnerTopLeft:
-                directionalTile = wallTileInnerBottomRight;
-                Debug.Log("Using Inner Bottom-Right tile for Inner Top-Left position");
+                tile = wallTileInnerTopLeft.tile;
+                transform = wallTileInnerTopLeft.GetRotationMatrix();
                 break;
             case WallType.InnerTopRight:
-                directionalTile = wallTileInnerBottomLeft;
-                Debug.Log("Using Inner Bottom-Left tile for Inner Top-Right position");
+                tile = wallTileInnerTopRight.tile;
+                transform = wallTileInnerTopRight.GetRotationMatrix();
                 break;
             case WallType.InnerBottomLeft:
-                directionalTile = wallTileInnerTopRight;
-                Debug.Log("Using Inner Top-Right tile for Inner Bottom-Left position");
+                tile = wallTileInnerBottomLeft.tile;
+                transform = wallTileInnerBottomLeft.GetRotationMatrix();
                 break;
             case WallType.InnerBottomRight:
-                directionalTile = wallTileInnerTopLeft;
-                Debug.Log("Using Inner Top-Left tile for Inner Bottom-Right position");
+                tile = wallTileInnerBottomRight.tile;
+                transform = wallTileInnerBottomRight.GetRotationMatrix();
                 break;
 
-            // Outer Corners - Make sure these are properly mapped
+            // Outer Corners - DIRECT MAPPING
             case WallType.OuterTopLeft:
-                directionalTile = wallTileOuterBottomRight;
-                Debug.Log("Using Outer Bottom-Right tile for Outer Top-Left position");
-                // Validate the tile is assigned
-                if (directionalTile.tile == null)
-                    Debug.LogWarning("WARNING: Outer Bottom-Right tile is null!");
+                tile = wallTileOuterTopLeft.tile;
+                transform = wallTileOuterTopLeft.GetRotationMatrix();
                 break;
             case WallType.OuterTopRight:
-                directionalTile = wallTileOuterBottomLeft;
-                Debug.Log("Using Outer Bottom-Left tile for Outer Top-Right position");
-                // Validate the tile is assigned
-                if (directionalTile.tile == null)
-                    Debug.LogWarning("WARNING: Outer Bottom-Left tile is null!");
+                tile = wallTileOuterTopRight.tile;
+                transform = wallTileOuterTopRight.GetRotationMatrix();
                 break;
             case WallType.OuterBottomLeft:
-                directionalTile = wallTileOuterTopRight;
-                Debug.Log("Using Outer Top-Right tile for Outer Bottom-Left position");
-                // Validate the tile is assigned
-                if (directionalTile.tile == null)
-                    Debug.LogWarning("WARNING: Outer Top-Right tile is null!");
+                tile = wallTileOuterBottomLeft.tile;
+                transform = wallTileOuterBottomLeft.GetRotationMatrix();
                 break;
             case WallType.OuterBottomRight:
-                directionalTile = wallTileOuterTopLeft;
-                Debug.Log("Using Outer Top-Left tile for Outer Bottom-Right position");
-                // Validate the tile is assigned
-                if (directionalTile.tile == null)
-                    Debug.LogWarning("WARNING: Outer Top-Left tile is null!");
+                tile = wallTileOuterBottomRight.tile;
+                transform = wallTileOuterBottomRight.GetRotationMatrix();
                 break;
 
             default:
-                directionalTile = null;
-                Debug.Log("No specific tile mapping for this wall type, using default");
+                // Default to standard wall tile
+                Debug.LogWarning($"No specific mapping for wall type {wallType}, using default wall tile");
                 break;
         }
 
-        // If directional tile is valid, apply its tile and transform
-        if (directionalTile != null && directionalTile.tile != null)
+        // Print wall tile name for debugging
+        if (tile != null)
         {
-            tile = directionalTile.tile;
-            transform = directionalTile.GetRotationMatrix();
-            Debug.Log($"Applied tile {tile.name} with rotation: {directionalTile.rotation}");
+            Debug.Log($"Applied tile {tile.name} for wall type {wallType}");
         }
         else
         {
-            Debug.LogWarning($"No valid directional tile found for {wallType}, using default wall tile");
+            Debug.LogWarning($"Null tile for wall type {wallType}, using default wall tile");
+            tile = wallTile;
         }
     }
 
@@ -1290,7 +1335,10 @@ public class HybridLevelGenerator : MonoBehaviour
         if (useDirectionalWalls)
         {
             // Place special corner tiles when DWT is ON
-            PlaceDirectionalCornerTiles();
+            AddMissingCornerTiles();
+
+            // Fix corridor junctions
+            FixCorridorJunctions();
         }
         else
         {
