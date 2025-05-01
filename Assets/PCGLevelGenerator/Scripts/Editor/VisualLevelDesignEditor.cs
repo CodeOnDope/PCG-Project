@@ -36,7 +36,7 @@ public class VisualLevelDesignEditor : EditorWindow
         public bool isDragging;
         public Color typeColor;
         public Vector2 visualSize;
-        
+
 
 
         public DesignerNode(string id, NodeType type, Vector2 position, Vector2Int logicalSize, Vector2 initialVisualSize, string name = null)
@@ -253,7 +253,7 @@ public class VisualLevelDesignEditor : EditorWindow
         zoom = Mathf.Min(zoomX, zoomY);
 
         // Ensure zoom is within reasonable bounds
-        zoom = Mathf.Clamp(zoom, 0.2f, 15.0f);
+        zoom = Mathf.Clamp(zoom, 0.1f, 5.0f);
 
         // Center the view on origin
         Vector2 screenCenter = graphViewRect.size / 2f;
@@ -482,9 +482,9 @@ public class VisualLevelDesignEditor : EditorWindow
         EditorGUILayout.EndHorizontal();
 
         GUIStyle creditStyle = new GUIStyle(EditorStyles.miniLabel);
-    creditStyle.alignment = TextAnchor.MiddleCenter;
-    creditStyle.normal.textColor = EditorGUIUtility.isProSkin ? new Color(0.7f, 0.7f, 0.7f) : new Color(0.4f, 0.4f, 0.4f);
-    EditorGUILayout.LabelField("Developed by Dineshkumar & Kamalanathan", creditStyle);
+        creditStyle.alignment = TextAnchor.MiddleCenter;
+        creditStyle.normal.textColor = EditorGUIUtility.isProSkin ? new Color(0.7f, 0.7f, 0.7f) : new Color(0.4f, 0.4f, 0.4f);
+        EditorGUILayout.LabelField("Developed by Dineshkumar & Kamalanathan", creditStyle);
     }
 
     private void DrawGraphArea(Rect availableRect)
@@ -546,6 +546,19 @@ public class VisualLevelDesignEditor : EditorWindow
             if (GUI.Button(buttonRect, "Edit HybridLevelGenerator"))
             {
                 Selection.activeObject = targetGenerator;
+            }
+
+            // Add a dismiss button to temporarily hide the warning
+            Rect dismissRect = new Rect(
+                warningRect.x + warningRect.width - 25,
+                warningRect.y + 5,
+                20,
+                20
+            );
+            if (GUI.Button(dismissRect, "×", EditorStyles.miniButton))
+            {
+                showBoundsWarning = false;
+                GUI.changed = true;
             }
         }
 
@@ -905,27 +918,33 @@ public class VisualLevelDesignEditor : EditorWindow
 
             bool isSelected = (selectedConnection == connection);
 
-            // Draw straight line connections
+            // Calculate line thickness based on zoom level - thicker when zoomed out
+            float baseThickness = 2.0f;
+            float zoomFactor = Mathf.Max(1f, 1.5f / zoom);
+            float outerThickness = baseThickness * zoomFactor;
+            float innerThickness = outerThickness * 0.5f;
+
+            // Draw straight line connections with improved visibility
             if (isSelected)
             {
                 // Draw a glow for selected connections
-                Handles.color = new Color(1f, 0.9f, 0.2f, 0.3f);
-                Handles.DrawLine(startPos, endPos, 5f);
+                Handles.color = new Color(1f, 0.9f, 0.2f, 0.5f); // More opaque
+                Handles.DrawLine(startPos, endPos, outerThickness);
                 Handles.color = Color.yellow;
-                Handles.DrawLine(startPos, endPos, 2f);
+                Handles.DrawLine(startPos, endPos, innerThickness);
             }
             else
             {
-                // Draw normal connections
-                Handles.color = new Color(0.5f, 0.8f, 1f, 0.3f);
-                Handles.DrawLine(startPos, endPos, 4f);
-                Handles.color = new Color(0.5f, 0.8f, 1f, 0.7f);
-                Handles.DrawLine(startPos, endPos, 1.5f);
+                // Draw normal connections with improved visibility
+                Handles.color = new Color(0.5f, 0.8f, 1f, 0.6f); // More opaque
+                Handles.DrawLine(startPos, endPos, outerThickness);
+                Handles.color = new Color(0.5f, 0.8f, 1f, 0.9f); // More opaque inner line
+                Handles.DrawLine(startPos, endPos, innerThickness);
             }
 
             // Calculate midpoint for the handle
             Vector2 handlePos = (startPos + endPos) * 0.5f;
-            float handleSize = isSelected ? 9f : 7f;
+            float handleSize = (isSelected ? 9f : 7f) * zoomFactor; // Scale with zoom
 
             // Create a rect for hit testing
             Rect midPointRect = new Rect(handlePos.x - handleSize / 2, handlePos.y - handleSize / 2,
@@ -992,14 +1011,15 @@ public class VisualLevelDesignEditor : EditorWindow
         Vector2 startPos = WorldToScreenPosition(connectingFromNode.position);
         Vector2 mousePos = Event.current.mousePosition;
 
-        // Draw straight line connection preview
-        // Outer glow
-        Handles.color = new Color(1f, 0.9f, 0.2f, 0.3f);
-        Handles.DrawLine(startPos, mousePos, 5f);
+        // Draw straight line connection preview with improved visibility
+        // Outer glow with higher opacity
+        Handles.color = new Color(1f, 0.9f, 0.2f, 0.5f);
+        float lineThickness = 5f * Mathf.Max(1f, 1.5f / zoom); // Scale with zoom
+        Handles.DrawLine(startPos, mousePos, lineThickness);
 
-        // Inner line
-        Handles.color = new Color(1f, 0.9f, 0.2f, 0.8f);
-        Handles.DrawLine(startPos, mousePos, 2f);
+        // Inner line with higher opacity
+        Handles.color = new Color(1f, 0.9f, 0.2f, 0.9f);
+        Handles.DrawLine(startPos, mousePos, lineThickness * 0.5f);
 
         Handles.color = Color.white;
         Handles.EndGUI();
@@ -1403,9 +1423,10 @@ public class VisualLevelDesignEditor : EditorWindow
 
     private void OnScrollWheel(Event e)
     {
-        float zoomDelta = -e.delta.y / 150.0f;
-        float newZoom = zoom + zoomDelta;
-        newZoom = Mathf.Clamp(newZoom, 0.2f, 3.0f);
+        // Improved zoom control with better sensitivity and limits
+        float zoomDelta = -e.delta.y * 0.05f; // Reduced sensitivity for smoother zooming
+        float newZoom = zoom * (1f + zoomDelta);
+        newZoom = Mathf.Clamp(newZoom, 0.1f, 5.0f); // Wider zoom range
 
         Vector2 mousePos = e.mousePosition;
         Vector2 worldPos = ScreenToWorldPosition(mousePos);
@@ -1424,9 +1445,9 @@ public class VisualLevelDesignEditor : EditorWindow
         bool clickedOnNode = false;
         selectedConnection = null;
 
-        for (int i = nodes.Count - 1; i >= 0; i--)
+        // Special handling for nodes outside boundaries - check them first
+        foreach (var node in nodesOutsideBounds)
         {
-            var node = nodes[i];
             if (node.rect.Contains(worldMousePos))
             {
                 selectedNode = node;
@@ -1436,6 +1457,28 @@ public class VisualLevelDesignEditor : EditorWindow
                 GUI.FocusControl(null);
                 e.Use();
                 break;
+            }
+        }
+
+        // If no outside-boundary node is clicked, check the regular nodes
+        if (!clickedOnNode)
+        {
+            for (int i = nodes.Count - 1; i >= 0; i--)
+            {
+                var node = nodes[i];
+                // Skip nodes we already checked in nodesOutsideBounds
+                if (nodesOutsideBounds.Contains(node)) continue;
+
+                if (node.rect.Contains(worldMousePos))
+                {
+                    selectedNode = node;
+                    isDraggingNode = true;
+                    dragStartOffset = worldMousePos - node.position;
+                    clickedOnNode = true;
+                    GUI.FocusControl(null);
+                    e.Use();
+                    break;
+                }
             }
         }
 
@@ -1669,7 +1712,7 @@ public class VisualLevelDesignEditor : EditorWindow
         float zoomX = graphViewRect.width / requiredWidth;
         float zoomY = graphViewRect.height / requiredHeight;
 
-        zoom = Mathf.Clamp(Mathf.Min(zoomX, zoomY), 0.2f, 1.0f);
+        zoom = Mathf.Clamp(Mathf.Min(zoomX, zoomY), 0.1f, 5.0f);
 
         Vector2 worldCenter = bounds.center;
         Vector2 screenCenter = graphViewRect.size / 2f;

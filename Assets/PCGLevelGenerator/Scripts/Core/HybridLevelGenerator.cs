@@ -96,7 +96,7 @@ public class HybridLevelGenerator : MonoBehaviour
     }
 
     [Header("Directional Wall Tiles")]
-    public bool useDirectionalWalls = true;
+    public bool useDirectionalWalls = false;
 
     [Tooltip("Wall with floor on the left")]
     public DirectionalTile wallTileLeft = new DirectionalTile();
