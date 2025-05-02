@@ -1411,143 +1411,77 @@ public class HybridLevelGenerator : MonoBehaviour
 
 
     private bool TryPlaceRoomTemplate(RectInt leaf, string roomId, out RectInt placedBounds)
-
     {
-
         placedBounds = RectInt.zero;
 
-
-
         // Initial validation
-
         if (roomTemplatePrefabs == null || roomTemplatePrefabs.Count == 0)
-
         {
-
             Debug.LogWarning($"No room template prefabs assigned or prefab list is empty.");
-
             return false;
-
         }
-
-
 
         // Get available templates sorted by size (smallest to largest) to try smaller ones first
-
         List<GameObject> sortedTemplates = new List<GameObject>(roomTemplatePrefabs);
-
         sortedTemplates.RemoveAll(p => p == null); // Filter out any null entries
 
-
-
         if (sortedTemplates.Count == 0)
-
         {
-
             Debug.LogWarning($"All room template prefabs are null references.");
-
             return false;
-
         }
-
-
 
         // Get dimensions of available templates and sort by area
-
         List<(GameObject prefab, int width, int height, int area)> templateSizes = new List<(GameObject, int, int, int)>();
-
         foreach (var prefab in sortedTemplates)
-
         {
-
             if (GetTemplateDimensions(prefab, out int tW, out int tH))
-
             {
-
                 templateSizes.Add((prefab, tW, tH, tW * tH));
-
             }
-
         }
-
-
 
         // Sort by area (smallest first)
-
         templateSizes.Sort((a, b) => a.area.CompareTo(b.area));
 
-
-
         // Calculate available space in leaf with padding
-
         int padding = Mathf.Max(0, (int)roomPadding);
-
         int availW = leaf.width - (2 * padding);
-
         int availH = leaf.height - (2 * padding);
 
-
-
         // Try to place each template in order of size
-
         foreach (var template in templateSizes)
-
         {
-
             // Skip if template is too large for the leaf
-
             if (template.width > availW || template.height > availH)
-
                 continue;
 
-
-
             // Calculate possible placement positions
-
             int possibleX = availW - template.width + 1;
-
             int possibleY = availH - template.height + 1;
 
-
-
             // If there are valid positions, try to place the template
-
             if (possibleX > 0 && possibleY > 0)
-
             {
-
                 int offX = pseudoRandom.Next(0, possibleX);
-
                 int offY = pseudoRandom.Next(0, possibleY);
-
                 int startX = leaf.x + padding + offX;
-
                 int startY = leaf.y + padding + offY;
 
-
-
                 // Attempt placement
-
                 if (PlaceSpecificRoomTemplate(template.prefab, new Vector2Int(startX, startY), out placedBounds))
-
                 {
+                    // Store the successful placement in the placedRoomBounds dictionary
+                    placedRoomBounds[roomId] = placedBounds;
 
                     Debug.Log($"Successfully placed template '{template.prefab.name}' in room {roomId}. Size: {template.width}x{template.height}");
-
                     return true;
-
                 }
-
             }
-
         }
 
-
-
         Debug.LogWarning($"Failed to place any template in room {roomId}. Available space: {availW}x{availH}");
-
         return false;
-
     }
 
 
