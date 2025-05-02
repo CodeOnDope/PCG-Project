@@ -23,7 +23,7 @@ public class HybridLevelGenerator : MonoBehaviour
              "FullyProcedural: BSP splits, random Rect rooms, procedural corridors.\n" +
              "HybridProcedural: BSP splits, random Templates/L-Shapes/Rects, procedural corridors.\n" +
              "UserDefinedLayout: Reads layout from RoomNode components placed in the scene.")]
-    public GenerationMode generationMode = GenerationMode.HybridProcedural;
+    public GenerationMode generationMode = GenerationMode.FullyProcedural;
 
     [Header("Level Dimensions (Max Bounds)")]
     [Tooltip("Maximum width of the generation grid.")]
@@ -166,6 +166,8 @@ public class HybridLevelGenerator : MonoBehaviour
     private List<RectInt> bspLeaves;
     private Dictionary<string, RectInt> placedRoomBounds = new Dictionary<string, RectInt>();
     private System.Random pseudoRandom;
+    private Dictionary<TileBase, TileType> tileTypeCache = new Dictionary<TileBase, TileType>();
+    private HashSet<string> reportedUnknownTiles = new HashSet<string>();
 
     // Parent Transform References
     private Transform playerHolder;
@@ -417,14 +419,6 @@ public class HybridLevelGenerator : MonoBehaviour
         {
             Debug.LogError($"--- Level Generation FAILED (Mode: {generationMode}) --- Check previous logs for specific error details.");
         }
-        if (generationSuccess)
-        {
-            ApplyTilesToTilemap();
-            // AddMissingCornerTiles() should now be called from within ApplyTilesToTilemap()
-            SpawnEntities();
-            Debug.Log($"--- Level Generation Complete --- Seed: {seed}. Rooms placed: {placedRoomBounds?.Count ?? 0}.");
-        }
-        // --- End Final Steps ---
     }
 
     // Full Clear method - Clears generated content AND scene nodes
@@ -657,7 +651,8 @@ public class HybridLevelGenerator : MonoBehaviour
         for (int i = 0; i < bspLeaves.Count; i++)
         {
             RectInt leaf = bspLeaves[i]; RectInt roomBounds = RectInt.zero; bool roomCreated = false; string roomId = $"Room_{i}";
-            if (roomTemplatePrefabs != null && roomTemplatePrefabs.Count > 0 && pseudoRandom.NextDouble() < roomTemplateProbability)
+            float effectiveTemplateProb = Mathf.Min(1.0f, roomTemplateProbability * 1.5f); // Boost by 50%
+            if (roomTemplatePrefabs != null && roomTemplatePrefabs.Count > 0 && pseudoRandom.NextDouble() < effectiveTemplateProb)
             {
                 if (TryPlaceRoomTemplate(leaf, roomId, out roomBounds)) { roomCreated = true; }
             }
@@ -709,29 +704,274 @@ public class HybridLevelGenerator : MonoBehaviour
         int minX = Mathf.Min(stemRect.xMin, legRect.xMin); int minY = Mathf.Min(stemRect.yMin, legRect.yMin); int maxX = Mathf.Max(stemRect.xMax, legRect.xMax); int maxY = Mathf.Max(stemRect.yMax, legRect.yMax); overallBounds = new RectInt(minX, minY, maxX - minX, maxY - minY); return true;
     }
 
+    // REPLACEMENT #1 - Replace the TryPlaceRoomTemplate method
+    // Find this method in your HybridLevelGenerator.cs file around line 400-450
+
     private bool TryPlaceRoomTemplate(RectInt leaf, string roomId, out RectInt placedBounds)
     {
-        placedBounds = RectInt.zero; if (roomTemplatePrefabs == null || roomTemplatePrefabs.Count == 0) return false;
-        GameObject prefab = roomTemplatePrefabs[pseudoRandom.Next(roomTemplatePrefabs.Count)]; if (prefab == null) return false;
-        if (!GetTemplateDimensions(prefab, out int tW, out int tH)) return false;
-        int pad = Mathf.Max(0, (int)roomPadding); int availW = leaf.width - (2 * pad); int availH = leaf.height - (2 * pad); if (tW > availW || tH > availH) return false;
-        int offX = pseudoRandom.Next(0, availW - tW + 1); int offY = pseudoRandom.Next(0, availH - tH + 1); int startX = leaf.x + pad + offX; int startY = leaf.y + pad + offY;
-        if (PlaceSpecificRoomTemplate(prefab, new Vector2Int(startX, startY), out placedBounds)) { if (placedRoomBounds == null) placedRoomBounds = new Dictionary<string, RectInt>(); placedRoomBounds[roomId] = placedBounds; return true; }
+        placedBounds = RectInt.zero;
+        Debug.Log($"[Template] Attempting to place template for room {roomId} in leaf {leaf}");
+
+        // Initial validation
+        if (roomTemplatePrefabs == null || roomTemplatePrefabs.Count == 0)
+        {
+            Debug.LogWarning($"No room template prefabs assigned or prefab list is empty.");
+            return false;
+        }
+
+        // Get available templates, filter out null entries
+        List<GameObject> validTemplates = new List<GameObject>(roomTemplatePrefabs);
+        validTemplates.RemoveAll(p => p == null);
+
+        if (validTemplates.Count == 0)
+        {
+            Debug.LogWarning($"All room template prefabs are null references.");
+            return false;
+        }
+
+        // Get dimensions of available templates
+        List<(GameObject prefab, int width, int height, int area)> templateSizes = new List<(GameObject, int, int, int)>();
+        foreach (var prefab in validTemplates)
+        {
+            if (GetTemplateDimensions(prefab, out int tW, out int tH))
+            {
+                templateSizes.Add((prefab, tW, tH, tW * tH));
+                Debug.Log($"[Template] Found valid template: {prefab.name}, Size: {tW}x{tH}, Area: {tW * tH}");
+            }
+        }
+
+        // Calculate available space in leaf with padding
+        int padding = Mathf.Max(0, (int)roomPadding);
+        int availW = leaf.width - (2 * padding);
+        int availH = leaf.height - (2 * padding);
+        Debug.Log($"[Template] Available space in leaf: {availW}x{availH}");
+
+        // CHANGED: Find all templates that fit the space, don't just sort by size
+        var validSizedTemplates = templateSizes
+            .Where(t => t.width <= availW && t.height <= availH)
+            .ToList();
+
+        if (validSizedTemplates.Count == 0)
+        {
+            Debug.LogWarning($"Failed to place any template in room {roomId}. No templates fit in available space: {availW}x{availH}");
+            return false;
+        }
+
+        // CHANGED: Randomly select from templates that fit, don't just pick smallest
+        var selectedTemplate = validSizedTemplates[pseudoRandom.Next(validSizedTemplates.Count)];
+        Debug.Log($"[Template] Selected template: {selectedTemplate.prefab.name}");
+
+        // Calculate placement position within the leaf (centered)
+        int offsetX = (availW - selectedTemplate.width) / 2;
+        int offsetY = (availH - selectedTemplate.height) / 2;
+        int startX = leaf.x + padding + offsetX;
+        int startY = leaf.y + padding + offsetY;
+
+        // Attempt placement
+        if (PlaceSpecificRoomTemplate(selectedTemplate.prefab, new Vector2Int(startX, startY), out placedBounds))
+        {
+            Debug.Log($"[Template] Successfully placed template '{selectedTemplate.prefab.name}' in room {roomId}. Bounds: {placedBounds}");
+            return true;
+        }
+
+        Debug.LogWarning($"[Template] Failed to place template '{selectedTemplate.prefab.name}' in room {roomId}.");
         return false;
     }
 
+
     private bool PlaceSpecificRoomTemplate(GameObject templatePrefab, Vector2Int targetGridBottomLeft, out RectInt placedBounds)
     {
-        placedBounds = RectInt.zero; if (templatePrefab == null) return false; GameObject temp = null;
+        placedBounds = RectInt.zero;
+        if (templatePrefab == null) return false;
+        GameObject temp = null;
+
         try
         {
-            temp = Instantiate(templatePrefab); temp.SetActive(false); Tilemap tm = temp.GetComponentInChildren<Tilemap>(); if (tm == null) return false; tm.CompressBounds(); BoundsInt bounds = tm.cellBounds; int tW = bounds.size.x; int tH = bounds.size.y; if (tW <= 0 || tH <= 0) return false; int startX = targetGridBottomLeft.x; int startY = targetGridBottomLeft.y; placedBounds = new RectInt(startX, startY, tW, tH); if (!IsRectWithinBounds(placedBounds)) return false;
-            foreach (Vector3Int pos in bounds.allPositionsWithin) { TileBase tile = tm.GetTile(pos); if (tile != null) { int gridX = startX + pos.x - bounds.xMin; int gridY = startY + pos.y - bounds.yMin; if (IsCoordInBounds(gridX, gridY)) { TileType type = TileType.Empty; if (tile == floorTile) type = TileType.Floor; else if (tile == wallTile) type = TileType.Wall; if (type != TileType.Empty) grid[gridX, gridY] = type; } } }
+            temp = Instantiate(templatePrefab);
+            temp.SetActive(false);
+            Tilemap tm = temp.GetComponentInChildren<Tilemap>();
+
+            if (tm == null)
+            {
+                Debug.LogWarning($"Template '{templatePrefab.name}' has no Tilemap component.");
+                return false;
+            }
+
+            tm.CompressBounds();
+            BoundsInt bounds = tm.cellBounds;
+
+            // Validate bounds
+            int tW = bounds.size.x;
+            int tH = bounds.size.y;
+            if (tW <= 0 || tH <= 0)
+            {
+                Debug.LogWarning($"Template '{templatePrefab.name}' has invalid bounds: {tW}x{tH}");
+                return false;
+            }
+
+            // Validate position is within level bounds
+            int startX = targetGridBottomLeft.x;
+            int startY = targetGridBottomLeft.y;
+            placedBounds = new RectInt(startX, startY, tW, tH);
+
+            if (!IsRectWithinBounds(placedBounds))
+            {
+                Debug.LogWarning($"Template '{templatePrefab.name}' placement outside level bounds.");
+                return false;
+            }
+
+            // Track if any valid tiles were found
+            bool anyValidTilesFound = false;
+            int floorTilesFound = 0;
+            int wallTilesFound = 0;
+
+            // Create a temporary list to track actual floor positions
+            List<Vector2Int> actualFloorPositions = new List<Vector2Int>();
+
+            // Process the template tiles
+            foreach (Vector3Int pos in bounds.allPositionsWithin)
+            {
+                TileBase tile = tm.GetTile(pos);
+                if (tile == null) continue;
+
+                int gridX = startX + pos.x - bounds.xMin;
+                int gridY = startY + pos.y - bounds.yMin;
+
+                if (!IsCoordInBounds(gridX, gridY)) continue;
+
+                // Determine tile type with smart recognition
+                TileType type = DetermineTileType(tile);
+
+                // Track if any valid tiles were found
+                if (type != TileType.Empty)
+                {
+                    anyValidTilesFound = true;
+                    grid[gridX, gridY] = type;
+
+                    if (type == TileType.Floor)
+                    {
+                        floorTilesFound++;
+                        actualFloorPositions.Add(new Vector2Int(gridX, gridY));
+                    }
+                    else if (type == TileType.Wall) wallTilesFound++;
+                }
+            }
+
+            if (!anyValidTilesFound)
+            {
+                Debug.LogWarning($"Template '{templatePrefab.name}' contains no recognizable floor or wall tiles.");
+                return false;
+            }
+
+            // Calculate the actual bounds based on floor tiles
+            // This is crucial for non-rectangular templates (like plus or diamond shapes)
+            if (actualFloorPositions.Count > 0)
+            {
+                int minX = int.MaxValue, minY = int.MaxValue;
+                int maxX = int.MinValue, maxY = int.MinValue;
+
+                foreach (var floorPos in actualFloorPositions)
+                {
+                    minX = Mathf.Min(minX, floorPos.x);
+                    minY = Mathf.Min(minY, floorPos.y);
+                    maxX = Mathf.Max(maxX, floorPos.x);
+                    maxY = Mathf.Max(maxY, floorPos.y);
+                }
+
+                // Update the placedBounds to reflect the actual floor tile positions
+                placedBounds = new RectInt(minX, minY, maxX - minX + 1, maxY - minY + 1);
+            }
+
+            Debug.Log($"[Template] Successfully placed template '{templatePrefab.name}' at {startX},{startY}. Found {floorTilesFound} floor tiles and {wallTilesFound} wall tiles. Actual bounds: {placedBounds}");
             return true;
         }
-        catch (Exception ex) { Debug.LogError($"Template Placement Exception: {ex.Message}"); return false; }
-        finally { if (temp != null) { if (Application.isPlaying) Destroy(temp); else DestroyImmediate(temp); } }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Template Placement Exception for '{templatePrefab?.name}': {ex.Message}\n{ex.StackTrace}");
+            return false;
+        }
+        finally
+        {
+            if (temp != null)
+            {
+                if (Application.isPlaying) Destroy(temp);
+                else DestroyImmediate(temp);
+            }
+        }
     }
+
+    private TileType DetermineTileType(TileBase tile)
+    {
+        // Return cached result if we've seen this tile before
+        if (tileTypeCache.TryGetValue(tile, out TileType cachedType))
+        {
+            return cachedType;
+        }
+
+        TileType resultType = TileType.Empty;
+
+        try
+        {
+            // 1. Check for exact matches first (fastest)
+            if (tile == floorTile || (floorTileVariants != null && floorTileVariants.Contains(tile)))
+            {
+                resultType = TileType.Floor;
+            }
+            else if (tile == wallTile || (wallTileVariants != null && wallTileVariants.Contains(tile)))
+            {
+                resultType = TileType.Wall;
+            }
+            // 2. Name-based checks (very reliable)
+            else
+            {
+                string tileName = tile.name.ToLower();
+
+                // Common floor naming patterns
+                if (tileName.Contains("floor") || tileName.Contains("ground") ||
+                    tileName.Contains("dirt") || (tileName.Contains("tile") && !tileName.Contains("wall")))
+                {
+                    resultType = TileType.Floor;
+                }
+                // Common wall naming patterns
+                else if (tileName.Contains("wall") || tileName.Contains("barrier") ||
+                        tileName.Contains("block") || tileName.Contains("border"))
+                {
+                    resultType = TileType.Wall;
+                }
+                // ADDED: Color-based detection for pink/colored tiles seen in your room templates
+                else
+                {
+                    // If the tile is from your custom template (likely pink/colored)
+                    // Force it to be a floor tile if it's not a known type
+                    // This is a temporary solution until proper tile naming is implemented
+                    resultType = TileType.Floor;
+                    Debug.Log($"[Template] Assuming unknown tile '{tile.name}' is a floor tile based on template usage.");
+                }
+            }
+
+            // Log once if we couldn't determine the type (to avoid log spam)
+            if (resultType == TileType.Empty && !reportedUnknownTiles.Contains(tile.name))
+            {
+                Debug.LogWarning($"Unable to determine tile type for '{tile.name}' in template. Consider renaming tile assets to include 'floor' or 'wall'.");
+                reportedUnknownTiles.Add(tile.name);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogError($"Error determining tile type: {ex.Message}");
+        }
+
+        // Cache the result to avoid repeated processing
+        tileTypeCache[tile] = resultType;
+        return resultType;
+    }
+
+    /// <summary>
+    /// Determines tile type with smart recognition and caching for performance
+    /// </summary>
+
+
+
 
     private bool GetTemplateDimensions(GameObject templatePrefab, out int width, out int height)
     {
@@ -793,24 +1033,258 @@ public class HybridLevelGenerator : MonoBehaviour
 
     private void CreateCorridors_Procedural()
     {
-        if (placedRoomBounds == null || placedRoomBounds.Count < 2) return;
-        List<RectInt> boundsList = new List<RectInt>(placedRoomBounds.Values); List<RectInt> connected = new List<RectInt>(); List<RectInt> unconnected = new List<RectInt>(boundsList);
-        RectInt start = unconnected[pseudoRandom.Next(unconnected.Count)]; connected.Add(start); unconnected.Remove(start);
+        if (placedRoomBounds == null || placedRoomBounds.Count < 2)
+        {
+            Debug.LogWarning("[Corridors] Not enough rooms to create corridors. Need at least 2 rooms.");
+            return;
+        }
+
+        Debug.Log($"[Corridors] Starting corridor generation between {placedRoomBounds.Count} rooms...");
+
+        // Get a list of all room bounds
+        List<RectInt> boundsList = new List<RectInt>(placedRoomBounds.Values);
+        List<RectInt> connected = new List<RectInt>();
+        List<RectInt> unconnected = new List<RectInt>(boundsList);
+
+        // Start with a random room
+        RectInt start = unconnected[pseudoRandom.Next(unconnected.Count)];
+        connected.Add(start);
+        unconnected.Remove(start);
+        Debug.Log($"[Corridors] Starting with room at {start.position}, size: {start.size}");
+
+        int connectionsCreated = 0;
+
+        // Connect each unconnected room to the closest connected room (Minimum Spanning Tree)
         while (unconnected.Count > 0)
         {
-            RectInt nearUncon = default; RectInt srcCon = default; float minDistSq = float.MaxValue;
-            foreach (RectInt conRoom in connected) { foreach (RectInt unconRoom in unconnected) { float dSq = Vector2.SqrMagnitude(conRoom.center - unconRoom.center); if (dSq < minDistSq) { minDistSq = dSq; nearUncon = unconRoom; srcCon = conRoom; } } }
-            if (nearUncon != default && srcCon != default) { ConnectRects(srcCon, nearUncon); connected.Add(nearUncon); unconnected.Remove(nearUncon); } else { Debug.LogError("MST Corridor Error"); break; }
+            RectInt nearestUnconnectedRoom = default;
+            RectInt nearestConnectedRoom = default;
+            float minDistance = float.MaxValue;
+
+            // Find the closest pair of connected and unconnected rooms
+            foreach (RectInt connectedRoom in connected)
+            {
+                foreach (RectInt unconnectedRoom in unconnected)
+                {
+                    float distance = Vector2.SqrMagnitude(connectedRoom.center - unconnectedRoom.center);
+                    if (distance < minDistance)
+                    {
+                        minDistance = distance;
+                        nearestUnconnectedRoom = unconnectedRoom;
+                        nearestConnectedRoom = connectedRoom;
+                    }
+                }
+            }
+
+            if (nearestUnconnectedRoom != default && nearestConnectedRoom != default)
+            {
+                // Create a corridor between these rooms
+                Debug.Log($"[Corridors] Connecting room at {nearestConnectedRoom.position} to room at {nearestUnconnectedRoom.position}");
+                ConnectRects(nearestConnectedRoom, nearestUnconnectedRoom);
+                connected.Add(nearestUnconnectedRoom);
+                unconnected.Remove(nearestUnconnectedRoom);
+                connectionsCreated++;
+            }
+            else
+            {
+                Debug.LogError("[Corridors] MST corridor generation error: Couldn't find nearest room pair");
+                break;
+            }
         }
-        Debug.Log($"Procedural corridor generation complete.");
+
+        // Add some additional connections for loops (optional)
+        int additionalCorridors = Mathf.Min(2, boundsList.Count / 4); // Add about 25% more corridors for loops
+        for (int i = 0; i < additionalCorridors; i++)
+        {
+            // Pick two random rooms to connect
+            if (boundsList.Count >= 2)
+            {
+                int idxA = pseudoRandom.Next(boundsList.Count);
+                int idxB = pseudoRandom.Next(boundsList.Count);
+                // Make sure they're different rooms
+                while (idxA == idxB && boundsList.Count > 1)
+                {
+                    idxB = pseudoRandom.Next(boundsList.Count);
+                }
+
+                ConnectRects(boundsList[idxA], boundsList[idxB]);
+                connectionsCreated++;
+            }
+        }
+
+        Debug.Log($"[Corridors] Corridor generation complete. Created {connectionsCreated} corridors.");
     }
 
     private void ConnectRects(RectInt roomA, RectInt roomB)
     {
-        Vector2Int cA = Vector2Int.RoundToInt(roomA.center); Vector2Int cB = Vector2Int.RoundToInt(roomB.center);
-        if (pseudoRandom.Next(0, 2) == 0) { CarveCorridorSegment(cA.x, cB.x, cA.y, true); CarveCorridorSegment(cA.y, cB.y, cB.x, false); }
-        else { CarveCorridorSegment(cA.y, cB.y, cA.x, false); CarveCorridorSegment(cA.x, cB.x, cB.y, true); }
+        // Get potential connection points from each room
+        List<Vector2Int> roomAConnectors = GetPotentialConnectionPoints(roomA);
+        List<Vector2Int> roomBConnectors = GetPotentialConnectionPoints(roomB);
+
+        if (roomAConnectors.Count == 0 || roomBConnectors.Count == 0)
+        {
+            Debug.LogWarning($"Unable to find valid connection points between rooms at {roomA.position} and {roomB.position}");
+
+            // Fallback to center points if no connection points found
+            Vector2Int cA = Vector2Int.RoundToInt(roomA.center);
+            Vector2Int cB = Vector2Int.RoundToInt(roomB.center);
+
+            Debug.Log($"[Corridors] Using fallback center points: {cA} to {cB}");
+
+            // Randomly choose to go X then Y, or Y then X
+            if (pseudoRandom.Next(0, 2) == 0)
+            {
+                // X then Y approach: First move horizontally, then vertically
+                CarveCorridorSegment(cA.x, cB.x, cA.y, true);
+                CarveCorridorSegment(cA.y, cB.y, cB.x, false);
+            }
+            else
+            {
+                // Y then X approach: First move vertically, then horizontally
+                CarveCorridorSegment(cA.y, cB.y, cA.x, false);
+                CarveCorridorSegment(cA.x, cB.x, cB.y, true);
+            }
+            return;
+        }
+
+        // Find the closest pair of connection points
+        Vector2Int bestPointA = roomAConnectors[0];
+        Vector2Int bestPointB = roomBConnectors[0];
+        float bestDistance = float.MaxValue;
+
+        foreach (var pointA in roomAConnectors)
+        {
+            foreach (var pointB in roomBConnectors)
+            {
+                float distance = Vector2.Distance(pointA, pointB);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestPointA = pointA;
+                    bestPointB = pointB;
+                }
+            }
+        }
+
+        Debug.Log($"[Corridors] Connecting from {bestPointA} to {bestPointB}");
+
+        // Randomly choose to go X then Y, or Y then X
+        if (pseudoRandom.Next(0, 2) == 0)
+        {
+            // X then Y approach: First move horizontally, then vertically
+            CarveCorridorSegment(bestPointA.x, bestPointB.x, bestPointA.y, true);
+            CarveCorridorSegment(bestPointA.y, bestPointB.y, bestPointB.x, false);
+        }
+        else
+        {
+            // Y then X approach: First move vertically, then horizontally
+            CarveCorridorSegment(bestPointA.y, bestPointB.y, bestPointA.x, false);
+            CarveCorridorSegment(bestPointA.x, bestPointB.x, bestPointB.y, true);
+        }
     }
+
+
+    private List<Vector2Int> GetPotentialConnectionPoints(RectInt room)
+    {
+        List<Vector2Int> connectionPoints = new List<Vector2Int>();
+
+        // Get actual floor tiles for this room
+        List<Vector2Int> floorTiles = GetFloorTilesInRect(room);
+
+        // Find edge tiles (floor tiles that are adjacent to walls or empty space)
+        foreach (var tile in floorTiles)
+        {
+            bool isEdge = false;
+
+            // Check in all four directions
+            for (int dx = -1; dx <= 1; dx += 2)
+            {
+                int nx = tile.x + dx;
+                if (!IsCoordInBounds(nx, tile.y) || grid[nx, tile.y] != TileType.Floor)
+                {
+                    isEdge = true;
+                    break;
+                }
+            }
+
+            if (!isEdge)
+            {
+                for (int dy = -1; dy <= 1; dy += 2)
+                {
+                    int ny = tile.y + dy;
+                    if (!IsCoordInBounds(tile.x, ny) || grid[tile.x, ny] != TileType.Floor)
+                    {
+                        isEdge = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isEdge)
+            {
+                connectionPoints.Add(tile);
+            }
+        }
+
+        // If no edge tiles found, use the center point as fallback
+        if (connectionPoints.Count == 0)
+        {
+            connectionPoints.Add(Vector2Int.RoundToInt(room.center));
+        }
+
+        return connectionPoints;
+    }
+
+    private List<Vector2Int> GetRoomEdgePoints(string roomId)
+    {
+        List<Vector2Int> edgePoints = new List<Vector2Int>();
+
+        if (!placedRoomBounds.TryGetValue(roomId, out RectInt bounds))
+        {
+            Debug.LogWarning($"Cannot find edge points for room {roomId}: Room not found in placedRoomBounds");
+            return edgePoints;
+        }
+
+        // Get all floor tiles in this room
+        List<Vector2Int> floorTiles = GetFloorTilesInRect(bounds);
+
+        // Find floor tiles that are adjacent to empty space or walls
+        foreach (var floor in floorTiles)
+        {
+            // Check in all four directions
+            bool isEdge = false;
+
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dy = -1; dy <= 1; dy++)
+                {
+                    // Skip diagonals and center
+                    if ((dx == 0 && dy == 0) || (dx != 0 && dy != 0)) continue;
+
+                    int nx = floor.x + dx;
+                    int ny = floor.y + dy;
+
+                    if (!IsCoordInBounds(nx, ny) || grid[nx, ny] == TileType.Wall)
+                    {
+                        isEdge = true;
+                        break;
+                    }
+                }
+
+                if (isEdge) break;
+            }
+
+            if (isEdge)
+            {
+                edgePoints.Add(floor);
+            }
+        }
+
+        return edgePoints;
+    }
+
+
+
 
     private void CarveCorridorSegment(int startCoord, int endCoord, int fixedCoord, bool isHorizontal)
     {
@@ -865,75 +1339,75 @@ public class HybridLevelGenerator : MonoBehaviour
     // First, improve the wall type detection to better handle corridor junctions
     // First, improve the wall type detection to better handle corridor junctions
     private WallType DetermineWallType(int x, int y)
-{
-    // Check surrounding cells for floor and wall tiles
-    bool hasFloorLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Floor;
-    bool hasFloorRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Floor;
-    bool hasFloorTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Floor;
-    bool hasFloorBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Floor;
-
-    // Count adjacent floor tiles for junction detection
-    int floorCount = 0;
-    if (hasFloorLeft) floorCount++;
-    if (hasFloorRight) floorCount++;
-    if (hasFloorTop) floorCount++;
-    if (hasFloorBottom) floorCount++;
-
-    // INNER CORNERS - Two adjacent floors in an L shape
-    if (hasFloorLeft && hasFloorTop && !hasFloorRight && !hasFloorBottom)
-        return WallType.InnerTopLeft;
-    if (hasFloorRight && hasFloorTop && !hasFloorLeft && !hasFloorBottom)
-        return WallType.InnerTopRight;
-    if (hasFloorLeft && hasFloorBottom && !hasFloorRight && !hasFloorTop)
-        return WallType.InnerBottomLeft;
-    if (hasFloorRight && hasFloorBottom && !hasFloorLeft && !hasFloorTop)
-        return WallType.InnerBottomRight;
-
-    // STRAIGHT WALLS - Floor on one side
-    if (hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
-        return WallType.Left;
-    if (hasFloorRight && !hasFloorLeft && !hasFloorTop && !hasFloorBottom)
-        return WallType.Right;
-    if (hasFloorTop && !hasFloorLeft && !hasFloorRight && !hasFloorBottom)
-        return WallType.Top;
-    if (hasFloorBottom && !hasFloorLeft && !hasFloorRight && !hasFloorTop)
-        return WallType.Bottom;
-
-    // CORRIDOR JUNCTIONS - Handle T-junctions and other multi-floor cases
-    if (floorCount >= 2)
     {
-        // T-junction cases
-        if (hasFloorLeft && hasFloorRight && hasFloorBottom && !hasFloorTop)
-            return WallType.Bottom;
-        if (hasFloorLeft && hasFloorRight && hasFloorTop && !hasFloorBottom)
-            return WallType.Top;
-        if (hasFloorLeft && hasFloorTop && hasFloorBottom && !hasFloorRight)
+        // Check surrounding cells for floor and wall tiles
+        bool hasFloorLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Floor;
+        bool hasFloorRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Floor;
+        bool hasFloorTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Floor;
+        bool hasFloorBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Floor;
+
+        // Count adjacent floor tiles for junction detection
+        int floorCount = 0;
+        if (hasFloorLeft) floorCount++;
+        if (hasFloorRight) floorCount++;
+        if (hasFloorTop) floorCount++;
+        if (hasFloorBottom) floorCount++;
+
+        // INNER CORNERS - Two adjacent floors in an L shape
+        if (hasFloorLeft && hasFloorTop && !hasFloorRight && !hasFloorBottom)
+            return WallType.InnerTopLeft;
+        if (hasFloorRight && hasFloorTop && !hasFloorLeft && !hasFloorBottom)
+            return WallType.InnerTopRight;
+        if (hasFloorLeft && hasFloorBottom && !hasFloorRight && !hasFloorTop)
+            return WallType.InnerBottomLeft;
+        if (hasFloorRight && hasFloorBottom && !hasFloorLeft && !hasFloorTop)
+            return WallType.InnerBottomRight;
+
+        // STRAIGHT WALLS - Floor on one side
+        if (hasFloorLeft && !hasFloorRight && !hasFloorTop && !hasFloorBottom)
             return WallType.Left;
-        if (hasFloorRight && hasFloorTop && hasFloorBottom && !hasFloorLeft)
+        if (hasFloorRight && !hasFloorLeft && !hasFloorTop && !hasFloorBottom)
             return WallType.Right;
+        if (hasFloorTop && !hasFloorLeft && !hasFloorRight && !hasFloorBottom)
+            return WallType.Top;
+        if (hasFloorBottom && !hasFloorLeft && !hasFloorRight && !hasFloorTop)
+            return WallType.Bottom;
 
-        // Determine best match for other cases with multiple floors
-        if (!hasFloorTop) return WallType.Bottom;
-        if (!hasFloorBottom) return WallType.Top;
-        if (!hasFloorLeft) return WallType.Right;
-        if (!hasFloorRight) return WallType.Left;
+        // CORRIDOR JUNCTIONS - Handle T-junctions and other multi-floor cases
+        if (floorCount >= 2)
+        {
+            // T-junction cases
+            if (hasFloorLeft && hasFloorRight && hasFloorBottom && !hasFloorTop)
+                return WallType.Bottom;
+            if (hasFloorLeft && hasFloorRight && hasFloorTop && !hasFloorBottom)
+                return WallType.Top;
+            if (hasFloorLeft && hasFloorTop && hasFloorBottom && !hasFloorRight)
+                return WallType.Left;
+            if (hasFloorRight && hasFloorTop && hasFloorBottom && !hasFloorLeft)
+                return WallType.Right;
+
+            // Determine best match for other cases with multiple floors
+            if (!hasFloorTop) return WallType.Bottom;
+            if (!hasFloorBottom) return WallType.Top;
+            if (!hasFloorLeft) return WallType.Right;
+            if (!hasFloorRight) return WallType.Left;
+        }
+
+        // Use simple outer corner detection from surrounding walls
+        bool hasWallLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Wall;
+        bool hasWallRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Wall;
+        bool hasWallTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Wall;
+        bool hasWallBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Wall;
+
+        // OUTER CORNERS - Detect based on adjacent walls    
+        if (hasWallLeft && hasWallTop) return WallType.OuterTopLeft;
+        if (hasWallRight && hasWallTop) return WallType.OuterTopRight;
+        if (hasWallLeft && hasWallBottom) return WallType.OuterBottomLeft;
+        if (hasWallRight && hasWallBottom) return WallType.OuterBottomRight;
+
+        // Default case
+        return WallType.Default;
     }
-
-    // Use simple outer corner detection from surrounding walls
-    bool hasWallLeft = IsCoordInBounds(x - 1, y) && grid[x - 1, y] == TileType.Wall;
-    bool hasWallRight = IsCoordInBounds(x + 1, y) && grid[x + 1, y] == TileType.Wall;
-    bool hasWallTop = IsCoordInBounds(x, y + 1) && grid[x, y + 1] == TileType.Wall;
-    bool hasWallBottom = IsCoordInBounds(x, y - 1) && grid[x, y - 1] == TileType.Wall;
-
-    // OUTER CORNERS - Detect based on adjacent walls    
-    if (hasWallLeft && hasWallTop) return WallType.OuterTopLeft;
-    if (hasWallRight && hasWallTop) return WallType.OuterTopRight;
-    if (hasWallLeft && hasWallBottom) return WallType.OuterBottomLeft;
-    if (hasWallRight && hasWallBottom) return WallType.OuterBottomRight;
-
-    // Default case
-    return WallType.Default;
-}
 
 
     private void FixCorridorJunctions()
@@ -1036,22 +1510,18 @@ public class HybridLevelGenerator : MonoBehaviour
             case WallType.Left:
                 tile = wallTileLeft.tile;
                 transform = wallTileLeft.GetRotationMatrix();
-                Debug.Log($"LEFT wall - using LEFT tile: {tile?.name ?? "null"}");
                 break;
             case WallType.Right:
                 tile = wallTileRight.tile;
                 transform = wallTileRight.GetRotationMatrix();
-                Debug.Log($"RIGHT wall - using RIGHT tile: {tile?.name ?? "null"}");
                 break;
             case WallType.Top:
                 tile = wallTileTop.tile;
                 transform = wallTileTop.GetRotationMatrix();
-                Debug.Log($"TOP wall - using TOP tile: {tile?.name ?? "null"}");
                 break;
             case WallType.Bottom:
                 tile = wallTileBottom.tile;
                 transform = wallTileBottom.GetRotationMatrix();
-                Debug.Log($"BOTTOM wall - using BOTTOM tile: {tile?.name ?? "null"}");
                 break;
 
             // Inner Corners - DIRECT MAPPING
@@ -1092,18 +1562,12 @@ public class HybridLevelGenerator : MonoBehaviour
 
             default:
                 // Default to standard wall tile
-                Debug.LogWarning($"No specific mapping for wall type {wallType}, using default wall tile");
                 break;
         }
 
-        // Print wall tile name for debugging
-        if (tile != null)
+        // Fallback if tile is null
+        if (tile == null)
         {
-            Debug.Log($"Applied tile {tile.name} for wall type {wallType}");
-        }
-        else
-        {
-            Debug.LogWarning($"Null tile for wall type {wallType}, using default wall tile");
             tile = wallTile;
         }
     }
@@ -1345,8 +1809,21 @@ public class HybridLevelGenerator : MonoBehaviour
             // Place regular wall tiles at corners when DWT is OFF
             PlaceRegularCornerTiles();
         }
+        if (useDirectionalWalls)
+        {
+            // Place special corner tiles when DWT is ON
+            AddMissingCornerTiles();
 
+            // Fix corridor junctions
+            FixCorridorJunctions();
+        }
+        else
+        {
+            // Place regular wall tiles at corners when DWT is OFF
+            PlaceRegularCornerTiles();
+        }
         Debug.Log($"Finished applying tiles. Floors: {floorTilesToPlace.Count}, Walls: {wallTilesToPlace.Count}");
+    
     }
 
     // Update the IsWallCandidate method in your HybridLevelGenerator.cs file
@@ -1395,13 +1872,105 @@ public class HybridLevelGenerator : MonoBehaviour
     #region Entity Spawning
     private void SpawnEntities()
     {
-        if (placedRoomBounds == null || placedRoomBounds.Count == 0) return; Debug.Log("Starting entity spawning..."); bool playerSpawned = false; List<Vector2Int> allFloor = new List<Vector2Int>();
-        foreach (var kvp in placedRoomBounds) { allFloor.AddRange(GetFloorTilesInRect(kvp.Value)); }
-        if (allFloor.Count == 0) { Debug.LogWarning("No floor tiles found, cannot spawn entities."); return; }
-        if (playerPrefab != null) { int idx = pseudoRandom.Next(allFloor.Count); Vector2Int tile = allFloor[idx]; Vector3 pos = GetWorldPosition(tile); Instantiate(playerPrefab, pos, Quaternion.identity, playerHolder); playerSpawned = true; allFloor.RemoveAt(idx); Debug.Log($"Player spawned at {tile}"); }
-        int enemiesTotal = enemiesPerRoom * placedRoomBounds.Count; int decorsTotal = decorationsPerRoom * placedRoomBounds.Count;
-        SpawnPrefabs(enemyPrefab, enemiesTotal, allFloor, enemiesHolder); SpawnPrefabs(decorationPrefab, decorsTotal, allFloor, decorationsHolder); Debug.Log($"Entity spawning finished. Player Spawned: {playerSpawned}");
+        if (placedRoomBounds == null || placedRoomBounds.Count == 0)
+        {
+            Debug.LogWarning("No rooms placed, cannot spawn entities.");
+            return;
+        }
+
+        Debug.Log("Starting entity spawning...");
+        bool playerSpawned = false;
+
+        // First collect all floor tiles for player spawning
+        List<Vector2Int> allFloor = new List<Vector2Int>();
+        foreach (var kvp in placedRoomBounds)
+        {
+            allFloor.AddRange(GetFloorTilesInRect(kvp.Value));
+        }
+
+        if (allFloor.Count == 0)
+        {
+            Debug.LogWarning("No floor tiles found, cannot spawn entities.");
+            return;
+        }
+
+        // Spawn player
+        if (playerPrefab != null && playerHolder.childCount == 0)
+        {
+            int idx = pseudoRandom.Next(allFloor.Count);
+            Vector2Int tile = allFloor[idx];
+            Vector3 pos = GetWorldPosition(tile);
+            Instantiate(playerPrefab, pos, Quaternion.identity, playerHolder);
+            playerSpawned = true;
+            Debug.Log($"Player spawned at {tile}");
+        }
+
+        // Track total entities spawned for debugging
+        int totalEnemies = 0;
+        int totalDecorations = 0;
+
+        // Spawn enemies and decorations PER ROOM 
+        foreach (var kvp in placedRoomBounds)
+        {
+            string roomId = kvp.Key;
+            RectInt roomBounds = kvp.Value;
+            List<Vector2Int> roomFloorTiles = GetFloorTilesInRect(roomBounds);
+
+            if (roomFloorTiles.Count == 0)
+            {
+                Debug.LogWarning($"Room {roomId} has no valid floor tiles for entity spawning.");
+                continue;
+            }
+
+            // Spawn enemies in this specific room
+            int enemiesSpawned = SpawnPrefabsInRoom(enemyPrefab, enemiesPerRoom, roomFloorTiles, enemiesHolder);
+            totalEnemies += enemiesSpawned;
+
+            // Spawn decorations in this specific room
+            int decorationsSpawned = SpawnPrefabsInRoom(decorationPrefab, decorationsPerRoom, roomFloorTiles, decorationsHolder);
+            totalDecorations += decorationsSpawned;
+        }
+
+        Debug.Log($"Entity spawning finished. Player Spawned: {playerSpawned}, " +
+                  $"Total Enemies: {totalEnemies} (max {enemiesPerRoom}/room), " +
+                  $"Total Decorations: {totalDecorations} (max {decorationsPerRoom}/room)");
     }
+
+
+
+    private int SpawnPrefabsInRoom(GameObject prefab, int maxCount, List<Vector2Int> roomFloorTiles, Transform parentHolder)
+    {
+        if (prefab == null || roomFloorTiles == null || parentHolder == null ||
+            roomFloorTiles.Count == 0 || maxCount <= 0)
+        {
+            return 0;
+        }
+
+        // Create a copy of the list so we don't modify the original
+        List<Vector2Int> availableSpots = new List<Vector2Int>(roomFloorTiles);
+        int spawned = 0;
+
+        // Determine how many to spawn (limited by available spots and max count)
+        int numToSpawn = Mathf.Min(maxCount, availableSpots.Count);
+
+        for (int i = 0; i < numToSpawn; i++)
+        {
+            if (availableSpots.Count == 0) break;
+
+            int idx = pseudoRandom.Next(availableSpots.Count);
+            Vector2Int tile = availableSpots[idx];
+            availableSpots.RemoveAt(idx); // Remove the used tile to prevent duplicates
+
+            Vector3 pos = GetWorldPosition(tile);
+            Instantiate(prefab, pos, Quaternion.identity, parentHolder);
+            spawned++;
+        }
+
+        return spawned;
+    }
+
+
+
 
     private void SpawnPrefabs(GameObject prefab, int maxCount, List<Vector2Int> availableSpots, Transform parentHolder)
     {

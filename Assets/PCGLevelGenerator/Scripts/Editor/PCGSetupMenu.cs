@@ -19,7 +19,7 @@ namespace PCGLevelGenerator
 {
     public static class PCGSetupMenu
     {
-        [MenuItem("Tools/PCG Level Generator/One-Click Setup")]
+        // Implementation method - NOT directly tied to the menu anymore
         public static void SetupCompletePCGSystem()
         {
             // Check if components already exist
@@ -62,15 +62,8 @@ namespace PCGLevelGenerator
             generator.groundTilemap = groundTilemap;
             generator.wallTilemap = wallTilemap;
 
-            // Find and assign floor/wall tiles
-            TileBase floorTile = FindDefaultTile("floor");
-            TileBase wallTile = FindDefaultTile("wall");
-
-            if (floorTile != null)
-                generator.floorTile = floorTile;
-
-            if (wallTile != null)
-                generator.wallTile = wallTile;
+            // Find and assign floor/wall tiles with proper filtering
+            FindAndAssignTiles(generator);
 
             // Auto-assign prefabs from the PCGLevelGenerator/Prefabs folder
             AssignPrefabs(generator);
@@ -79,10 +72,11 @@ namespace PCGLevelGenerator
             generator.levelWidth = 100;
             generator.levelHeight = 100;
             generator.corridorWidth = 2;
-            generator.roomPadding = 2.37f;
-
+            generator.roomPadding = 2f;
+            SetupCameraFollow();
             // Select the generator in the hierarchy
             Selection.activeGameObject = generatorObject;
+            generator.generationMode = GenerationMode.FullyProcedural;
 
             // Show the setup complete dialog using EditorUtility.DisplayDialog instead
             EditorUtility.DisplayDialog("PCG Level Generator Setup Complete",
@@ -94,6 +88,218 @@ namespace PCGLevelGenerator
                 "Got it!");
         }
 
+
+        private static void SetupCameraFollow()
+        {
+            // Find or create Main Camera
+            Camera mainCamera = Camera.main;
+            if (mainCamera == null)
+            {
+                // Create a new camera if none exists
+                GameObject cameraObj = new GameObject("Main Camera");
+                cameraObj.tag = "MainCamera";
+                mainCamera = cameraObj.AddComponent<Camera>();
+                mainCamera.clearFlags = CameraClearFlags.SolidColor;
+                mainCamera.backgroundColor = new Color(0.192f, 0.301f, 0.474f);
+                mainCamera.orthographic = true;
+                mainCamera.orthographicSize = 10f;
+                mainCamera.transform.position = new Vector3(0, 0, -10);
+                Debug.Log("Created new Main Camera");
+            }
+
+            // Check if CameraFollow script is already attached
+            CameraFollow existingScript = mainCamera.GetComponent<CameraFollow>();
+            if (existingScript == null)
+            {
+                // Try to find the CameraFollow script type by path
+                string scriptPath = "Assets/PCGLevelGenerator/Scripts/Core/CameraFollow.cs";
+                MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(scriptPath);
+
+                if (scriptAsset != null)
+                {
+                    // Add the script component
+                    mainCamera.gameObject.AddComponent(scriptAsset.GetClass());
+                    Debug.Log("Added CameraFollow script to Main Camera");
+                }
+                else
+                {
+                    Debug.LogError("Could not find CameraFollow script at path: " + scriptPath);
+                }
+            }
+            else
+            {
+                Debug.Log("CameraFollow script already attached to Main Camera");
+            }
+        }
+
+
+        private static void FindAndAssignTiles(HybridLevelGenerator generator)
+        {
+            Debug.Log("Finding and assigning floor and wall tiles...");
+
+            // First try to find tiles in the Floor and Wall Tiles folder ONLY
+            string mainFolderPath = "Assets/PCGLevelGenerator/Tiles/Floor and Wall Tiles";
+            if (Directory.Exists(mainFolderPath))
+            {
+                Debug.Log("Searching for tiles in: " + mainFolderPath);
+
+                // Try to find the wall tile first with specific names
+                string[] wallTileNames = {
+            "Wall Tile.asset",
+            "WallTile.asset",
+            "Wall Tile 1.asset",
+            "WallTile1.asset"
+        };
+
+                foreach (string tileName in wallTileNames)
+                {
+                    string fullPath = Path.Combine(mainFolderPath, tileName);
+                    if (File.Exists(fullPath))
+                    {
+                        TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(fullPath);
+                        if (tile != null)
+                        {
+                            generator.wallTile = tile;
+                            Debug.Log("Assigned Wall Tile: " + tile.name);
+                            break;
+                        }
+                    }
+                }
+
+                // If no specific wall tile found, search for any with "Wall" in name
+                if (generator.wallTile == null)
+                {
+                    string[] assetFiles = Directory.GetFiles(mainFolderPath, "*.asset", SearchOption.TopDirectoryOnly);
+                    foreach (string assetPath in assetFiles)
+                    {
+                        string fileName = Path.GetFileNameWithoutExtension(assetPath);
+
+                        // Only look for wall tiles that are not directional
+                        if (fileName.Contains("Wall") &&
+                            !fileName.Contains("Bottom") &&
+                            !fileName.Contains("Top") &&
+                            !fileName.Contains("Left") &&
+                            !fileName.Contains("Right") &&
+                            !fileName.Contains("Corner") &&
+                            !fileName.Contains("Inner") &&
+                            !fileName.Contains("Outer"))
+                        {
+                            TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(assetPath);
+                            if (tile != null)
+                            {
+                                generator.wallTile = tile;
+                                Debug.Log("Assigned Wall Tile: " + tile.name);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Now look for floor tile
+                string[] floorTileNames = {
+            "Floor Tile.asset",
+            "FloorTile.asset",
+            "Floor Tile 1.asset",
+            "FloorTile1.asset"
+        };
+
+                foreach (string tileName in floorTileNames)
+                {
+                    string fullPath = Path.Combine(mainFolderPath, tileName);
+                    if (File.Exists(fullPath))
+                    {
+                        TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(fullPath);
+                        if (tile != null)
+                        {
+                            generator.floorTile = tile;
+                            Debug.Log("Assigned Floor Tile: " + tile.name);
+                            break;
+                        }
+                    }
+                }
+
+                // If no specific floor tile found, search for any with "Floor" in name
+                if (generator.floorTile == null)
+                {
+                    string[] assetFiles = Directory.GetFiles(mainFolderPath, "*.asset", SearchOption.TopDirectoryOnly);
+                    foreach (string assetPath in assetFiles)
+                    {
+                        string fileName = Path.GetFileNameWithoutExtension(assetPath);
+
+                        if (fileName.Contains("Floor"))
+                        {
+                            TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(assetPath);
+                            if (tile != null)
+                            {
+                                generator.floorTile = tile;
+                                Debug.Log("Assigned Floor Tile: " + tile.name);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Fallback to project-wide search if needed, but still filter directional tiles
+            if (generator.wallTile == null || generator.floorTile == null)
+            {
+                Debug.Log("Falling back to project-wide search for missing tiles");
+
+                string[] allTileGuids = AssetDatabase.FindAssets("t:TileBase");
+
+                foreach (string guid in allTileGuids)
+                {
+                    string path = AssetDatabase.GUIDToAssetPath(guid);
+                    string fileName = Path.GetFileNameWithoutExtension(path);
+
+                    // Skip any directional tiles
+                    if (path.Contains("Directional") ||
+                        fileName.Contains("Bottom") ||
+                        fileName.Contains("Top") ||
+                        fileName.Contains("Left") ||
+                        fileName.Contains("Right") ||
+                        fileName.Contains("Inner") ||
+                        fileName.Contains("Outer") ||
+                        fileName.Contains("Corner"))
+                    {
+                        continue;
+                    }
+
+                    // Wall tile
+                    if (generator.wallTile == null && fileName.Contains("Wall"))
+                    {
+                        TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+                        if (tile != null)
+                        {
+                            generator.wallTile = tile;
+                            Debug.Log("Assigned Wall Tile (from project): " + tile.name);
+                        }
+                    }
+
+                    // Floor tile
+                    if (generator.floorTile == null && fileName.Contains("Floor"))
+                    {
+                        TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+                        if (tile != null)
+                        {
+                            generator.floorTile = tile;
+                            Debug.Log("Assigned Floor Tile (from project): " + tile.name);
+                        }
+                    }
+                }
+            }
+
+            // Report results
+            if (generator.wallTile != null)
+                Debug.Log("Wall Tile assigned: " + generator.wallTile.name);
+            else
+                Debug.LogWarning("Failed to assign Wall Tile!");
+
+            if (generator.floorTile != null)
+                Debug.Log("Floor Tile assigned: " + generator.floorTile.name);
+            else
+                Debug.LogWarning("Failed to assign Floor Tile!");
+        }
         // Keep your existing methods here...
         private static Tilemap CreateTilemap(GameObject parent, string name, int sortingOrder, string sortingLayer = "Default")
         {
@@ -288,14 +494,14 @@ namespace PCGLevelGenerator
 
             // Simple layout using EditorGUILayout
             EditorGUILayout.BeginVertical();
-            
+
             // Simplified dark header area
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             GUILayout.Space(10);
-            
+
             // Title
             GUILayout.Label("PCG Level Generator", EditorStyles.boldLabel);
-            
+
             GUILayout.Label("Developed by Dineshkumar & Kamalanathan", EditorStyles.centeredGreyMiniLabel);
             GUILayout.Space(10);
             EditorGUILayout.EndVertical();
@@ -327,14 +533,6 @@ namespace PCGLevelGenerator
                 "This will set up a complete PCG Level Generator system with all required components in your scene.",
                 MessageType.None);
 
-            GUILayout.Space(15);
-
-            // Designer button
-            if (GUILayout.Button("Open Visual Level Designer", GUILayout.Height(30)))
-            {
-                EditorApplication.ExecuteMenuItem("Window/Visual Level Designer");
-                Close();
-            }
 
             GUILayout.FlexibleSpace();
 
@@ -348,9 +546,9 @@ namespace PCGLevelGenerator
             EditorGUILayout.EndVertical();
         }
 
-        // Menu item to reopen this window
-        [MenuItem("Tools/PCG Level Generator/Welcome Screen")]
-        public static void ShowWindowMenuItem()
+        // Single combined menu item
+        [MenuItem("Tools/PCG Level Generator/Setup & Welcome")]
+        public static void ShowSetupAndWelcome()
         {
             ShowWindow();
         }

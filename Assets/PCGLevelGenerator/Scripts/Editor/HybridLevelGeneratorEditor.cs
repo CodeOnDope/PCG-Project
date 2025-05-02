@@ -1,9 +1,10 @@
 ﻿using UnityEngine;
 using UnityEditor;
+using UnityEngine.Tilemaps;
 using System.Collections.Generic;
 using System;
 using System.Linq;
-using UnityEngine.Tilemaps; // Needed for Tilemap checks
+using System.IO; // Needed for Tilemap checks
 
 // ██████╗  ██████╗  ██████╗    ██╗     ███████╗██╗   ██╗███████╗██╗         ██████╗ ███████╗███╗   ██╗
 // ██╔══██╗██╔════╝ ██╔════╝    ██║     ██╔════╝██║   ██║██╔════╝██║        ██╔════╝ ██╔════╝████╗  ██║
@@ -391,15 +392,15 @@ public class HybridLevelGeneratorEditor : Editor
         // Initialize Assets Button
         GUI.backgroundColor = new Color(0.3f, 0.5f, 0.9f);
         if (GUILayout.Button(new GUIContent(" Initialize Assets", EditorGUIUtility.IconContent("d_Refresh").image),
-                        actionButtonStyle, GUILayout.Height(30)))
+                actionButtonStyle, GUILayout.Height(30)))
         {
             bool proceed = EditorUtility.DisplayDialog("Initialize Assets",
-                "This will search for and auto-assign assets from standard folders:\n\n" +
-                "• Basic Tiles from main Tiles folder\n" +
-                "• Directional Wall Tiles from subfolders\n" +
-                "• Entity prefabs from Prefabs folder\n\n" +
-                "This won't overwrite any existing assignments. Continue?",
-                "Initialize", "Cancel");
+         "This will search for and auto-assign assets from standard folders:\n\n" +
+         "• Basic Tiles from main Tiles folder (NOT from subfolders)\n" +
+         "• Directional Wall Tiles from subfolders\n" +
+         "• Entity prefabs from Prefabs folder\n\n" +
+         "This WILL overwrite any existing assignments. Continue?",
+         "Initialize", "Cancel");
 
             if (proceed)
             {
@@ -718,174 +719,212 @@ public class HybridLevelGeneratorEditor : Editor
     }
 
     // Asset initialization method
+    // Asset initialization method
+    // Asset initialization method
+    // Asset initialization method
     private void InitializeAssets()
     {
+        // Get the target reference
         HybridLevelGenerator generator = (HybridLevelGenerator)target;
         Undo.RecordObject(generator, "Initialize Assets");
         bool anyAssetsAssigned = false;
 
-        // Check if we're in the editor
-#if UNITY_EDITOR
+        Debug.Log("=== INITIALIZING ASSETS ===");
 
-        // 1. Load Required Tiles
-        // For Floor Tile from Assets/PCGLevelGenerator/Tiles
-        // 1. Load Required Tiles
-        // For Floor Tile from Assets/PCGLevelGenerator/Tiles/Directional Tiles
-        if (generator.floorTile == null)
+        // Clear any existing wall tile if it's a directional tile
+        if (generator.wallTile != null &&
+           (generator.wallTile.name.Contains("Bottom") ||
+            generator.wallTile.name.Contains("Top") ||
+            generator.wallTile.name.Contains("Left") ||
+            generator.wallTile.name.Contains("Right")))
         {
-            string directionalTilesPath = "Assets/PCGLevelGenerator/Tiles/Directional Tiles";
-            if (AssetDatabase.IsValidFolder(directionalTilesPath))
+            Debug.Log("Clearing directional wall tile: " + generator.wallTile.name);
+            generator.wallTile = null;
+        }
+
+        // 1. First try to find tiles in the Floor and Wall Tiles folder ONLY
+        string mainFolderPath = "Assets/PCGLevelGenerator/Tiles/Floor and Wall Tiles";
+        if (System.IO.Directory.Exists(Application.dataPath + mainFolderPath.Substring(6)))
+        {
+            // Get files only from this specific folder
+            string[] assetFiles = System.IO.Directory.GetFiles(
+                Application.dataPath + mainFolderPath.Substring(6),
+                "*.asset",
+                System.IO.SearchOption.TopDirectoryOnly);
+
+            // Process all files in this folder
+            foreach (string fullPath in assetFiles)
             {
-                // Get all tile assets directly in the Directional Tiles folder (not in subfolders)
-                string[] guids = AssetDatabase.FindAssets("t:TileBase Floor", new[] { directionalTilesPath });
-                foreach (string guid in guids)
+                string assetPath = "Assets" + fullPath.Substring(Application.dataPath.Length).Replace('\\', '/');
+                string fileName = System.IO.Path.GetFileNameWithoutExtension(assetPath);
+
+                // Wall Tile - check it's not a directional tile
+                if (generator.wallTile == null &&
+                    fileName.ToLower().Contains("wall") &&
+                    !fileName.Contains("Bottom") &&
+                    !fileName.Contains("Top") &&
+                    !fileName.Contains("Left") &&
+                    !fileName.Contains("Right"))
                 {
-                    string path = AssetDatabase.GUIDToAssetPath(guid);
-                    // Make sure it's directly in the Directional Tiles folder, not in subfolders
-                    string[] pathParts = path.Split('/');
-                    if (pathParts.Length == 6 && pathParts[4] == "Directional Tiles")
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(assetPath);
+                    if (tile != null)
                     {
-                        TileBase floorTile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
-                        if (floorTile != null)
-                        {
-                            generator.floorTile = floorTile;
-                            anyAssetsAssigned = true;
-                            Debug.Log($"Assigned Floor Tile: {floorTile.name} from path: {path}");
-                            break;
-                        }
+                        generator.wallTile = tile;
+                        anyAssetsAssigned = true;
+                        Debug.Log("Assigned Wall Tile: " + tile.name);
+                    }
+                }
+
+                // Floor Tile
+                if (generator.floorTile == null && fileName.ToLower().Contains("floor"))
+                {
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(assetPath);
+                    if (tile != null)
+                    {
+                        generator.floorTile = tile;
+                        anyAssetsAssigned = true;
+                        Debug.Log("Assigned Floor Tile: " + tile.name);
                     }
                 }
             }
         }
 
-        // For Wall Tile from Assets/PCGLevelGenerator/Tiles/Directional Tiles
-        if (generator.wallTile == null)
-        {
-            string directionalTilesPath = "Assets/PCGLevelGenerator/Tiles/Directional Tiles";
-            if (AssetDatabase.IsValidFolder(directionalTilesPath))
-            {
-                // Get all tile assets directly in the Directional Tiles folder (not in subfolders)
-                string[] guids = AssetDatabase.FindAssets("t:TileBase Wall", new[] { directionalTilesPath });
-                foreach (string guid in guids)
-                {
-                    string path = AssetDatabase.GUIDToAssetPath(guid);
-                    // Make sure it's directly in the Directional Tiles folder, not in subfolders
-                    string[] pathParts = path.Split('/');
-                    if (pathParts.Length == 6 && pathParts[4] == "Directional Tiles")
-                    {
-                        TileBase wallTile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
-                        if (wallTile != null)
-                        {
-                            generator.wallTile = wallTile;
-                            anyAssetsAssigned = true;
-                            Debug.Log($"Assigned Wall Tile: {wallTile.name} from path: {path}");
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Load Directional Wall Tiles
-        // Basic Wall Directions
-        LoadDirectionalTiles(generator, "Basic Wall Directions");
-
-        // Inner Corner Tiles
-        LoadDirectionalTiles(generator, "Inner Corner Tiles");
-
-        // Outer Corner Tiles
-        LoadDirectionalTiles(generator, "Outer Corner Tiles");
-
-        // 3. Load Entity Prefabs
-        if (generator.playerPrefab == null)
-        {
-            string[] playerGuids = AssetDatabase.FindAssets("t:GameObject Player", new[] { "Assets/PCGLevelGenerator/Prefabs" });
-            if (playerGuids.Length > 0)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(playerGuids[0]);
-                GameObject playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                if (playerPrefab != null)
-                {
-                    generator.playerPrefab = playerPrefab;
-                    anyAssetsAssigned = true;
-                    Debug.Log($"Assigned Player Prefab: {playerPrefab.name}");
-                }
-            }
-        }
-
-        if (generator.enemyPrefab == null)
-        {
-            string[] enemyGuids = AssetDatabase.FindAssets("t:GameObject Enemy", new[] { "Assets/PCGLevelGenerator/Prefabs" });
-            if (enemyGuids.Length > 0)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(enemyGuids[0]);
-                GameObject enemyPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                if (enemyPrefab != null)
-                {
-                    generator.enemyPrefab = enemyPrefab;
-                    anyAssetsAssigned = true;
-                    Debug.Log($"Assigned Enemy Prefab: {enemyPrefab.name}");
-                }
-            }
-        }
-
-        if (generator.decorationPrefab == null)
-        {
-            string[] decorGuids = AssetDatabase.FindAssets("t:GameObject Decoration", new[] { "Assets/PCGLevelGenerator/Prefabs" });
-            if (decorGuids.Length > 0)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(decorGuids[0]);
-                GameObject decorPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-                if (decorPrefab != null)
-                {
-                    generator.decorationPrefab = decorPrefab;
-                    anyAssetsAssigned = true;
-                    Debug.Log($"Assigned Decoration Prefab: {decorPrefab.name}");
-                }
-            }
-        }
-
-        // 4. Find and assign Tilemaps if not already assigned
+        // 2. Find and assign Tilemaps if needed
         if (generator.groundTilemap == null || generator.wallTilemap == null)
         {
             Tilemap[] tilemaps = FindObjectsByType<Tilemap>(FindObjectsSortMode.None);
-            if (tilemaps.Length > 0)
+            foreach (Tilemap tilemap in tilemaps)
             {
-                foreach (Tilemap tilemap in tilemaps)
+                if (generator.groundTilemap == null && tilemap.name.ToLower().Contains("ground"))
                 {
-                    if (generator.groundTilemap == null && tilemap.name.ToLower().Contains("ground"))
-                    {
-                        generator.groundTilemap = tilemap;
-                        anyAssetsAssigned = true;
-                        Debug.Log($"Assigned Ground Tilemap: {tilemap.name}");
-                    }
-                    else if (generator.wallTilemap == null && tilemap.name.ToLower().Contains("wall"))
-                    {
-                        generator.wallTilemap = tilemap;
-                        anyAssetsAssigned = true;
-                        Debug.Log($"Assigned Wall Tilemap: {tilemap.name}");
-                    }
+                    generator.groundTilemap = tilemap;
+                    anyAssetsAssigned = true;
+                    Debug.Log("Assigned Ground Tilemap: " + tilemap.name);
+                }
+                else if (generator.wallTilemap == null && tilemap.name.ToLower().Contains("wall"))
+                {
+                    generator.wallTilemap = tilemap;
+                    anyAssetsAssigned = true;
+                    Debug.Log("Assigned Wall Tilemap: " + tilemap.name);
                 }
             }
         }
 
-        // Mark as dirty to save changes
+        // 3. Only after main tiles are assigned, load directional tiles
+        if (generator.wallTile != null)
+        {
+            LoadDirectionalTilesWithOverwrite(generator, "Basic Wall Directions");
+            LoadDirectionalTilesWithOverwrite(generator, "Inner Corner Tiles");
+            LoadDirectionalTilesWithOverwrite(generator, "Outer Corner Tiles");
+        }
+
+        // 4. Continue with the rest of your existing initialization code
+        // (Entity prefabs, etc.)
+
+        // Save changes
         if (anyAssetsAssigned)
         {
             EditorUtility.SetDirty(generator);
             MarkSceneDirty(generator);
-            ShowFeedback("Assets initialized successfully! Check the console for details.", MessageType.Info);
-            hasInitializedAssets = true;
+            ShowFeedback("Assets initialized successfully!", MessageType.Info);
         }
         else
         {
-            ShowFeedback("No new assets were found or needed to be assigned.", MessageType.Info);
+            ShowFeedback("No assets were found to assign.", MessageType.Info);
         }
-#endif
+    }
+
+
+    // Add this function to your HybridLevelGeneratorEditor.cs
+
+    private void AssignMainWallTile(HybridLevelGenerator generator)
+    {
+        // Explicitly look for wall tiles ONLY in the main "Floor and Wall Tiles" folder
+        string mainFolderPath = "Assets/PCGLevelGenerator/Tiles/Floor and Wall Tiles";
+        string[] guids = AssetDatabase.FindAssets("t:TileBase Wall", new[] { mainFolderPath });
+
+        Debug.Log($"Found {guids.Length} potential wall tiles in main folder");
+
+        foreach (string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+
+            // Skip ANY tiles from directional tile folders
+            if (path.Contains("Directional Tiles") ||
+                path.Contains("Basic Wall Directions") ||
+                path.Contains("Inner Corner Tiles") ||
+                path.Contains("Outer Corner Tiles"))
+            {
+                Debug.Log($"Skipping directional tile: {path}");
+                continue;
+            }
+
+            // Only process files directly in the target folder
+            string directory = System.IO.Path.GetDirectoryName(path).Replace('\\', '/');
+            if (directory != mainFolderPath)
+            {
+                Debug.Log($"Skipping tile not in target folder: {path}");
+                continue;
+            }
+
+            TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+            if (tile != null)
+            {
+                generator.wallTile = tile;
+                Debug.Log($"ASSIGNED MAIN WALL TILE: {tile.name} from {path}");
+                return; // Exit after finding first valid tile
+            }
+        }
+
+        Debug.LogWarning("Could not find a suitable Wall Tile in the Floor and Wall Tiles folder");
+    }
+
+
+    private void SetupCameraFollow()
+    {
+        // Find or create Main Camera
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null)
+        {
+            // Create a new camera if none exists
+            GameObject cameraObj = new GameObject("Main Camera");
+            cameraObj.tag = "MainCamera";
+            mainCamera = cameraObj.AddComponent<Camera>();
+            mainCamera.clearFlags = CameraClearFlags.SolidColor;
+            mainCamera.backgroundColor = new Color(0.192f, 0.301f, 0.474f);
+            mainCamera.orthographic = true;
+            mainCamera.orthographicSize = 10f;
+            mainCamera.transform.position = new Vector3(0, 0, -10);
+            Debug.Log("Created new Main Camera");
+        }
+
+        // Check if CameraFollow script is already attached
+        CameraFollow existingScript = mainCamera.GetComponent<CameraFollow>();
+        if (existingScript == null)
+        {
+            // Try to load the CameraFollow script
+            string scriptPath = "Assets/PCGLevelGenerator/Scripts/Core/CameraFollow.cs";
+            MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(scriptPath);
+
+            if (scriptAsset != null)
+            {
+                // Add the script component
+                mainCamera.gameObject.AddComponent<CameraFollow>();
+                Debug.Log("Added CameraFollow script to Main Camera");
+            }
+            else
+            {
+                Debug.LogError("Could not find CameraFollow script at path: " + scriptPath);
+            }
+        }
+        else
+        {
+            Debug.Log("CameraFollow script already attached to Main Camera");
+        }
     }
 
     // Helper method to load all directional tiles from a specific folder
-    private void LoadDirectionalTiles(HybridLevelGenerator generator, string subfolderName)
+    private void LoadDirectionalTilesWithOverwrite(HybridLevelGenerator generator, string subfolderName)
     {
         string basePath = $"Assets/PCGLevelGenerator/Tiles/Directional Tiles/{subfolderName}";
 
@@ -937,14 +976,18 @@ public class HybridLevelGeneratorEditor : Editor
             // Try to match the tile name with our mapping
             foreach (var mapping in tileMapping)
             {
-                if (tile.name.Contains(mapping.Key) && mapping.Value.objectReferenceValue == null)
+                if (tile.name.Contains(mapping.Key))
                 {
+                    // Always overwrite the value, regardless of whether it's already assigned
                     mapping.Value.objectReferenceValue = tile;
                     Debug.Log($"Assigned {mapping.Key} Tile: {tile.name} from {path}");
                     break;
                 }
             }
         }
+
+        // Apply the changes
+        serializedObject.ApplyModifiedProperties();
     }
 
     // --- Utility ---
