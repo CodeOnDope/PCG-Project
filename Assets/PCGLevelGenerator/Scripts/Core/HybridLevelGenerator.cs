@@ -1410,6 +1410,7 @@ public class HybridLevelGenerator : MonoBehaviour
 
 
 
+    // Located at line 614 in your code
     private bool TryPlaceRoomTemplate(RectInt leaf, string roomId, out RectInt placedBounds)
     {
         placedBounds = RectInt.zero;
@@ -1471,7 +1472,7 @@ public class HybridLevelGenerator : MonoBehaviour
                 // Attempt placement
                 if (PlaceSpecificRoomTemplate(template.prefab, new Vector2Int(startX, startY), out placedBounds))
                 {
-                    // Store the successful placement in the placedRoomBounds dictionary
+                    // THIS IS THE CRITICAL LINE THAT WAS MISSING:
                     placedRoomBounds[roomId] = placedBounds;
 
                     Debug.Log($"Successfully placed template '{template.prefab.name}' in room {roomId}. Size: {template.width}x{template.height}");
