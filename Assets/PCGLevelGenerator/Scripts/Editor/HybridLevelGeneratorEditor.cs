@@ -108,6 +108,10 @@ public class HybridLevelGeneratorEditor : Editor
     private Dictionary<string, float> foldoutAnimValues = new Dictionary<string, float>();
     private bool stylesInitialized = false;
 
+    // Textures for template validation indicators
+    private Texture2D validTexture;
+    private Texture2D invalidTexture;
+
 
     private void InitializeStylesAndColors()
     {
@@ -141,7 +145,27 @@ public class HybridLevelGeneratorEditor : Editor
             modeButtonContents[i] = new GUIContent(ObjectNames.NicifyVariableName(modeNames[i]), GetModeTooltip((GenerationMode)i));
         }
 
+        // Create indicator textures for template validation
+        validTexture = CreateTexture(Color.green);
+        invalidTexture = CreateTexture(Color.red);
+
         stylesInitialized = true;
+    }
+
+    private Texture2D CreateTexture(Color color)
+    {
+        Texture2D tex = new Texture2D(16, 16);
+        Color[] colors = new Color[16 * 16];
+
+        for (int i = 0; i < colors.Length; i++)
+        {
+            colors[i] = color;
+        }
+
+        tex.SetPixels(colors);
+        tex.Apply();
+
+        return tex;
     }
 
     private Texture2D MakeColorTexture(Color color)
@@ -598,12 +622,114 @@ public class HybridLevelGeneratorEditor : Editor
 
         EditorGUILayout.Space(8);
         EditorGUILayout.LabelField("Room Templates List", subHeaderStyle);
-        EditorGUILayout.PropertyField(roomTemplatePrefabsProp, true);
-        EditorGUILayout.HelpBox("Assign Room Template Prefabs (must contain Tilemap).", MessageType.None);
+
+        // Show number of templates with valid status
+        int totalTemplates = roomTemplatePrefabsProp.arraySize;
+        int validTemplates = 0;
+
+        for (int i = 0; i < totalTemplates; i++)
+        {
+            SerializedProperty templateProp = roomTemplatePrefabsProp.GetArrayElementAtIndex(i);
+            GameObject prefabRef = templateProp.objectReferenceValue as GameObject;
+            if (IsValidTemplate(prefabRef))
+            {
+                validTemplates++;
+            }
+        }
+
+        EditorGUILayout.LabelField($"Template Status: {validTemplates}/{totalTemplates} valid", EditorStyles.boldLabel);
+
+        if (roomTemplatePrefabsProp.arraySize > 0)
+        {
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            // Draw each template with validation indicator
+            for (int i = 0; i < roomTemplatePrefabsProp.arraySize; i++)
+            {
+                DrawTemplateElement(roomTemplatePrefabsProp.GetArrayElementAtIndex(i), i);
+            }
+
+            EditorGUILayout.Space(5);
+
+            if (GUILayout.Button("+ Add Template"))
+            {
+                roomTemplatePrefabsProp.arraySize++;
+            }
+
+            EditorGUILayout.EndVertical();
+        }
+        else
+        {
+            // No templates yet
+            EditorGUILayout.HelpBox("No template prefabs assigned. These should contain a Tilemap component.", MessageType.Info);
+
+            if (GUILayout.Button("+ Add First Template"))
+            {
+                roomTemplatePrefabsProp.arraySize = 1;
+            }
+        }
 
         EditorGUILayout.Space(5);
         EditorGUILayout.LabelField("User Defined Node Default", subHeaderStyle);
         EditorGUILayout.PropertyField(defaultSceneNodeSizeProp, new GUIContent("Default Node Size", "Size for UserDefined nodes if size is zero."));
+    }
+
+    private void DrawTemplateElement(SerializedProperty templateProp, int index)
+    {
+        EditorGUILayout.BeginHorizontal();
+
+        // Get the template GameObject reference
+        GameObject prefabRef = templateProp.objectReferenceValue as GameObject;
+
+        // Check if template is valid for level generation
+        bool isValidTemplate = IsValidTemplate(prefabRef);
+
+        // Draw status indicator (green/red light)
+        Rect indicatorRect = GUILayoutUtility.GetRect(16, 16, GUILayout.Width(16), GUILayout.ExpandWidth(false));
+        if (isValidTemplate)
+        {
+            EditorGUI.DrawRect(indicatorRect, new Color(0.1f, 0.8f, 0.2f)); // Green
+            GUI.Label(indicatorRect, new GUIContent("", "Template will be used in level generation"));
+        }
+        else
+        {
+            EditorGUI.DrawRect(indicatorRect, new Color(0.8f, 0.2f, 0.1f)); // Red
+            GUI.Label(indicatorRect, new GUIContent("", "Template will NOT be used in level generation: Missing Tilemap or invalid setup"));
+        }
+
+        // Template field
+        EditorGUILayout.PropertyField(templateProp, GUIContent.none);
+
+        // Delete button
+        if (GUILayout.Button("×", GUILayout.Width(20)))
+        {
+            roomTemplatePrefabsProp.DeleteArrayElementAtIndex(index);
+        }
+
+        EditorGUILayout.EndHorizontal();
+
+        // Show validation message if invalid
+        if (!isValidTemplate && prefabRef != null)
+        {
+            EditorGUILayout.HelpBox("This template is invalid. Templates must contain a Tilemap component.", MessageType.Warning);
+        }
+    }
+
+    private bool IsValidTemplate(GameObject prefab)
+    {
+        if (prefab == null)
+            return false;
+
+        // Check if the prefab contains a Tilemap component
+        var tilemaps = prefab.GetComponentsInChildren<Tilemap>(true);
+        return tilemaps != null && tilemaps.Length > 0;
+    }
+
+    // Called when Inspector OnGUI draws
+    public override bool RequiresConstantRepaint()
+    {
+        // Return true to ensure the red/green indicators update immediately
+        return true;
     }
 
     private void DrawCorridorSection()
@@ -718,9 +844,6 @@ public class HybridLevelGeneratorEditor : Editor
         EditorGUILayout.PropertyField(decorationsPerRoomProp, new GUIContent("Max Decors/Room"));
     }
 
-    // Asset initialization method
-    // Asset initialization method
-    // Asset initialization method
     // Asset initialization method
     private void InitializeAssets()
     {
