@@ -4,7 +4,7 @@ using UnityEngine.Tilemaps;
 using System.Collections.Generic;
 using System;
 using System.Linq;
-using System.IO; // Needed for Tilemap checks
+using System.IO;
 
 // ██████╗  ██████╗  ██████╗    ██╗     ███████╗██╗   ██╗███████╗██╗         ██████╗ ███████╗███╗   ██╗
 // ██╔══██╗██╔════╝ ██╔════╝    ██║     ██╔════╝██║   ██║██╔════╝██║        ██╔════╝ ██╔════╝████╗  ██║
@@ -17,8 +17,6 @@ using System.IO; // Needed for Tilemap checks
 // Copyright (c) 2025 Dineshkumar & Kamalanathan
 // Version: 1.0.0
 
-
-// Assumes GenerationMode enum is defined in LevelGenerationTypes.cs or similar
 [CustomEditor(typeof(HybridLevelGenerator))]
 public class HybridLevelGeneratorEditor : Editor
 {
@@ -51,25 +49,20 @@ public class HybridLevelGeneratorEditor : Editor
     SerializedProperty decorationsPerRoomProp;
     SerializedProperty defaultSceneNodeSizeProp;
 
-    // Updated directional wall tile properties - matched to sprite numbers
+    // Directional wall tile properties
     SerializedProperty useDirectionalWallsProp;
-    // Basic Wall Directions (1-4)
-    SerializedProperty wallTileBottomProp; // Sprite #1
-    SerializedProperty wallTileTopProp;    // Sprite #2
-    SerializedProperty wallTileRightProp;  // Sprite #3
-    SerializedProperty wallTileLeftProp;   // Sprite #4
-
-    // Inner corner tiles (5-8)
-    SerializedProperty wallTileInnerTopLeftProp;     // Sprite #5
-    SerializedProperty wallTileInnerTopRightProp;    // Sprite #6
-    SerializedProperty wallTileInnerBottomLeftProp;  // Sprite #7
-    SerializedProperty wallTileInnerBottomRightProp; // Sprite #8
-
-    // Outer corner tiles (9-12)
-    SerializedProperty wallTileOuterTopLeftProp;     // Sprite #9
-    SerializedProperty wallTileOuterTopRightProp;    // Sprite #10
-    SerializedProperty wallTileOuterBottomLeftProp;  // Sprite #11
-    SerializedProperty wallTileOuterBottomRightProp; // Sprite #12
+    SerializedProperty wallTileBottomProp;
+    SerializedProperty wallTileTopProp;
+    SerializedProperty wallTileRightProp;
+    SerializedProperty wallTileLeftProp;
+    SerializedProperty wallTileInnerTopLeftProp;
+    SerializedProperty wallTileInnerTopRightProp;
+    SerializedProperty wallTileInnerBottomLeftProp;
+    SerializedProperty wallTileInnerBottomRightProp;
+    SerializedProperty wallTileOuterTopLeftProp;
+    SerializedProperty wallTileOuterTopRightProp;
+    SerializedProperty wallTileOuterBottomLeftProp;
+    SerializedProperty wallTileOuterBottomRightProp;
 
     // --- UI States ---
     private bool showFeedback = false;
@@ -77,113 +70,54 @@ public class HybridLevelGeneratorEditor : Editor
     private MessageType feedbackType = MessageType.Info;
     private double feedbackExpireTime;
 
-    // For asset initialization state tracking
-    private bool hasInitializedAssets = false;
+    // Current active tab
+    private int currentTab = 0;
+    private readonly string[] tabNames = { "1. Mode", "2. Tiles", "3. Rooms", "4. Entities", "5. Generate" };
 
-    // Section foldouts
-    private bool showLevelDimensions = true;
-    private bool showBspSettings = true;
-    private bool showHybridSettings = true;
-    private bool showCorridorSettings = true;
-    private bool showTilemapSettings = true;
-    private bool showEntitySettings = true;
-    private bool showHelp = false;
 
-    // --- Styles & Content Cache ---
+
+    // Setup progress tracking
+
+    private bool[] setupComplete = new bool[4]; // Track completion of each step
+
+    // Add these with your other UI state variables (near line 60-70 where you have other UI states)
+
+    private bool showInnerCornersFoldout = false;
+
+    private bool showOuterCornersFoldout = false;
+
+    // Styling elements
+
     private GUIStyle headerStyle;
-    private GUIStyle foldoutHeaderStyle;
     private GUIStyle subHeaderStyle;
-    private GUIStyle generateButtonStyle;
-    private GUIStyle clearButtonStyle;
-    private Color headerColor;
-    private Color accentColor;
-    private Color generateButtonColor; // Store actual color
-    private Color clearButtonColor;    // Store actual color
-    private readonly Color[] modeColors = new Color[Enum.GetNames(typeof(GenerationMode)).Length];
-    private GUIContent[] modeButtonContents;
+    private GUIStyle tabStyle;
+    private GUIStyle activeTabStyle;
+    private GUIStyle stepCompletedStyle;
+    private GUIStyle boxStyle;
+    private GUIStyle warningStyle;
+    private GUIStyle successStyle;
+    private Texture2D successIconTexture;
+    private Texture2D warningIconTexture;
+    private Texture2D infoIconTexture;
+    private readonly Color accentColor = new Color(0.2f, 0.6f, 0.9f);
+    private readonly Color successColor = new Color(0.2f, 0.7f, 0.3f);
+    private readonly Color warningColor = new Color(0.9f, 0.6f, 0.1f);
+    private readonly Color errorColor = new Color(0.9f, 0.3f, 0.2f);
 
-    private const float FOLDOUT_ANIM_SPEED = 3.0f;
-    private const float FEEDBACK_DURATION = 3.5f;
-    private float pulseTime = 0f;
-    private Dictionary<string, float> foldoutAnimValues = new Dictionary<string, float>();
-    private bool stylesInitialized = false;
 
-    // Textures for template validation indicators
+
+    // Textures for template validation
+
     private Texture2D validTexture;
     private Texture2D invalidTexture;
 
 
-    private void InitializeStylesAndColors()
-    {
-        if (stylesInitialized) return;
 
-        headerColor = EditorGUIUtility.isProSkin ? new Color(0.18f, 0.22f, 0.25f) : new Color(0.8f, 0.82f, 0.85f);
-        accentColor = EditorGUIUtility.isProSkin ? new Color(0.3f, 0.6f, 1f) : new Color(0.2f, 0.5f, 0.9f);
-        modeColors[0] = EditorGUIUtility.isProSkin ? new Color(0.4f, 0.6f, 0.9f, 0.8f) : new Color(0.5f, 0.7f, 1.0f, 0.8f);
-        modeColors[1] = EditorGUIUtility.isProSkin ? new Color(0.9f, 0.6f, 0.3f, 0.8f) : new Color(1.0f, 0.7f, 0.4f, 0.8f);
-        modeColors[2] = EditorGUIUtility.isProSkin ? new Color(0.4f, 0.8f, 0.5f, 0.8f) : new Color(0.5f, 0.9f, 0.6f, 0.8f);
-        generateButtonColor = EditorGUIUtility.isProSkin ? new Color(0.2f, 0.7f, 0.5f) : new Color(0.3f, 0.8f, 0.6f);
-        clearButtonColor = EditorGUIUtility.isProSkin ? new Color(0.8f, 0.3f, 0.3f) : new Color(0.9f, 0.4f, 0.4f);
+    // Animation
 
-        headerStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 16, alignment = TextAnchor.MiddleCenter, normal = { textColor = EditorGUIUtility.isProSkin ? new Color(0.8f, 0.85f, 0.9f) : new Color(0.1f, 0.1f, 0.1f) } };
-        foldoutHeaderStyle = new GUIStyle(EditorStyles.foldoutHeader) { fixedHeight = 22, fontSize = 12, fontStyle = FontStyle.Bold, padding = new RectOffset(15, 5, 3, 3) };
-        subHeaderStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 11, margin = new RectOffset(0, 0, 5, 2), normal = { textColor = EditorGUIUtility.isProSkin ? new Color(0.7f, 0.7f, 0.7f) : new Color(0.35f, 0.35f, 0.35f) } };
-        generateButtonStyle = new GUIStyle(GUI.skin.button) { fontSize = 12, fontStyle = FontStyle.Bold, fixedHeight = 40, alignment = TextAnchor.MiddleCenter };
-        clearButtonStyle = new GUIStyle(generateButtonStyle);
+    private float pulseTime = 0f;
 
-        foldoutAnimValues["dimensions"] = showLevelDimensions ? 1f : 0f;
-        foldoutAnimValues["bsp"] = showBspSettings ? 1f : 0f;
-        foldoutAnimValues["hybrid"] = showHybridSettings ? 1f : 0f;
-        foldoutAnimValues["corridor"] = showCorridorSettings ? 1f : 0f;
-        foldoutAnimValues["tilemap"] = showTilemapSettings ? 1f : 0f;
-        foldoutAnimValues["entity"] = showEntitySettings ? 1f : 0f;
 
-        string[] modeNames = Enum.GetNames(typeof(GenerationMode));
-        modeButtonContents = new GUIContent[modeNames.Length];
-        for (int i = 0; i < modeNames.Length; i++)
-        {
-            modeButtonContents[i] = new GUIContent(ObjectNames.NicifyVariableName(modeNames[i]), GetModeTooltip((GenerationMode)i));
-        }
-
-        // Create indicator textures for template validation
-        validTexture = CreateTexture(Color.green);
-        invalidTexture = CreateTexture(Color.red);
-
-        stylesInitialized = true;
-    }
-
-    private Texture2D CreateTexture(Color color)
-    {
-        Texture2D tex = new Texture2D(16, 16);
-        Color[] colors = new Color[16 * 16];
-
-        for (int i = 0; i < colors.Length; i++)
-        {
-            colors[i] = color;
-        }
-
-        tex.SetPixels(colors);
-        tex.Apply();
-
-        return tex;
-    }
-
-    private Texture2D MakeColorTexture(Color color)
-    {
-        Texture2D tex = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
-        tex.SetPixel(0, 0, color); tex.Apply(); return tex;
-    }
-
-    private string GetModeTooltip(GenerationMode mode)
-    {
-        switch (mode)
-        {
-            case GenerationMode.FullyProcedural: return "Generates level using BSP partitions, rectangular rooms, and MST corridors.";
-            case GenerationMode.HybridProcedural: return "Generates level using BSP, mixing Rectangles, L-Shapes, and Room Templates + MST corridors.\nOffers more variety.";
-            case GenerationMode.UserDefinedLayout: return "Generates level based on RoomNode components placed manually in the scene via the Visual Level Designer.";
-            default: return "";
-        }
-    }
 
     private void OnEnable()
     {
@@ -212,70 +146,2126 @@ public class HybridLevelGeneratorEditor : Editor
         decorationsPerRoomProp = serializedObject.FindProperty("decorationsPerRoom");
         defaultSceneNodeSizeProp = serializedObject.FindProperty("defaultSceneNodeSize");
 
-        // Update these property findings for directional wall tiles with rotation
+        // Directional wall tiles
         useDirectionalWallsProp = serializedObject.FindProperty("useDirectionalWalls");
+        wallTileBottomProp = serializedObject.FindProperty("wallTileBottom");
+        wallTileTopProp = serializedObject.FindProperty("wallTileTop");
+        wallTileRightProp = serializedObject.FindProperty("wallTileRight");
+        wallTileLeftProp = serializedObject.FindProperty("wallTileLeft");
+        wallTileInnerTopLeftProp = serializedObject.FindProperty("wallTileInnerTopLeft");
+        wallTileInnerTopRightProp = serializedObject.FindProperty("wallTileInnerTopRight");
+        wallTileInnerBottomLeftProp = serializedObject.FindProperty("wallTileInnerBottomLeft");
+        wallTileInnerBottomRightProp = serializedObject.FindProperty("wallTileInnerBottomRight");
+        wallTileOuterTopLeftProp = serializedObject.FindProperty("wallTileOuterTopLeft");
+        wallTileOuterTopRightProp = serializedObject.FindProperty("wallTileOuterTopRight");
+        wallTileOuterBottomLeftProp = serializedObject.FindProperty("wallTileOuterBottomLeft");
+        wallTileOuterBottomRightProp = serializedObject.FindProperty("wallTileOuterBottomRight");
 
-        // Basic Wall Directions - matching sprite numbers 1-4
-        wallTileBottomProp = serializedObject.FindProperty("wallTileBottom"); // Sprite #1
-        wallTileTopProp = serializedObject.FindProperty("wallTileTop");       // Sprite #2
-        wallTileRightProp = serializedObject.FindProperty("wallTileRight");   // Sprite #3
-        wallTileLeftProp = serializedObject.FindProperty("wallTileLeft");     // Sprite #4
-
-        // Inner corner tiles - matching sprite numbers 5-8
-        wallTileInnerTopLeftProp = serializedObject.FindProperty("wallTileInnerTopLeft");         // Sprite #5
-        wallTileInnerTopRightProp = serializedObject.FindProperty("wallTileInnerTopRight");       // Sprite #6
-        wallTileInnerBottomLeftProp = serializedObject.FindProperty("wallTileInnerBottomLeft");   // Sprite #7
-        wallTileInnerBottomRightProp = serializedObject.FindProperty("wallTileInnerBottomRight"); // Sprite #8
-
-        // Outer corner tiles - matching sprite numbers 9-12
-        wallTileOuterTopLeftProp = serializedObject.FindProperty("wallTileOuterTopLeft");         // Sprite #9
-        wallTileOuterTopRightProp = serializedObject.FindProperty("wallTileOuterTopRight");       // Sprite #10
-        wallTileOuterBottomLeftProp = serializedObject.FindProperty("wallTileOuterBottomLeft");   // Sprite #11
-        wallTileOuterBottomRightProp = serializedObject.FindProperty("wallTileOuterBottomRight"); // Sprite #12
-
-        // Add the new tile variant properties
+        // Tile variants
         floorTileVariantsProp = serializedObject.FindProperty("floorTileVariants");
         wallTileVariantsProp = serializedObject.FindProperty("wallTileVariants");
         variantTileChanceProp = serializedObject.FindProperty("variantTileChance");
 
-        stylesInitialized = false; // Reinitialize styles
-
+        // Register for editor updates
         EditorApplication.update -= OnEditorUpdate;
         EditorApplication.update += OnEditorUpdate;
+
+
+
+        // Set initial tab to first incomplete step
+
+        UpdateSetupProgress();
     }
 
-    private void OnDisable() { EditorApplication.update -= OnEditorUpdate; }
+    private void OnDisable()
+    {
+        EditorApplication.update -= OnEditorUpdate;
+    }
 
     private void OnEditorUpdate()
     {
-        bool needsRepaint = false;
         pulseTime = (float)(EditorApplication.timeSinceStartup * 2.5) % (2f * Mathf.PI);
-        UpdateFoldoutAnimation("dimensions", showLevelDimensions, ref needsRepaint);
-        UpdateFoldoutAnimation("bsp", showBspSettings, ref needsRepaint);
-        UpdateFoldoutAnimation("hybrid", showHybridSettings, ref needsRepaint);
-        UpdateFoldoutAnimation("corridor", showCorridorSettings, ref needsRepaint);
-        UpdateFoldoutAnimation("tilemap", showTilemapSettings, ref needsRepaint);
-        UpdateFoldoutAnimation("entity", showEntitySettings, ref needsRepaint);
-        if (showFeedback && EditorApplication.timeSinceStartup > feedbackExpireTime) { showFeedback = false; needsRepaint = true; }
-        if (needsRepaint) Repaint();
+
+
+
+        // Clear feedback after timeout
+
+        if (showFeedback && EditorApplication.timeSinceStartup > feedbackExpireTime)
+        {
+            showFeedback = false;
+            Repaint();
+        }
     }
 
-    private void UpdateFoldoutAnimation(string key, bool targetState, ref bool needsRepaint)
+
+
+    private void InitializeStyles()
+
     {
-        float targetValue = targetState ? 1f : 0f;
-        if (!foldoutAnimValues.ContainsKey(key))
+
+        // Only initialize once
+
+        if (headerStyle != null) return;
+
+
+
+        // Create header style
+
+        headerStyle = new GUIStyle(EditorStyles.boldLabel);
+
+        headerStyle.fontSize = 16;
+
+        headerStyle.alignment = TextAnchor.MiddleCenter;
+
+        headerStyle.normal.textColor = EditorGUIUtility.isProSkin ?
+
+            new Color(0.8f, 0.85f, 0.9f) : new Color(0.1f, 0.1f, 0.1f);
+
+
+
+        // Create subheader style
+
+        subHeaderStyle = new GUIStyle(EditorStyles.boldLabel);
+
+        subHeaderStyle.fontSize = 12;
+
+        subHeaderStyle.margin = new RectOffset(0, 0, 10, 5);
+
+        // Add subtle background for section headers
+
+        subHeaderStyle.normal.background = MakeColorTexture(new Color(0.3f, 0.3f, 0.3f, 0.1f));
+
+        subHeaderStyle.padding = new RectOffset(5, 5, 3, 3);
+
+
+
+        // Create tab styles
+
+        tabStyle = new GUIStyle(GUI.skin.button);
+
+        tabStyle.fixedHeight = 35;
+
+        tabStyle.fontSize = 12;
+
+        tabStyle.padding = new RectOffset(5, 5, 8, 8);
+
+        // Enhance button text appearance
+
+        tabStyle.normal.textColor = EditorGUIUtility.isProSkin ?
+
+            new Color(0.8f, 0.8f, 0.8f) : new Color(0.2f, 0.2f, 0.2f);
+
+
+
+        // Active tab style
+
+        activeTabStyle = new GUIStyle(tabStyle);
+
+        activeTabStyle.normal.background = MakeColorTexture(accentColor);
+
+        activeTabStyle.normal.textColor = Color.white;
+
+        activeTabStyle.fontStyle = FontStyle.Bold;
+
+
+
+        // Step completed style
+
+        stepCompletedStyle = new GUIStyle(EditorStyles.label);
+
+        stepCompletedStyle.fontSize = 11;
+
+        stepCompletedStyle.normal.textColor = successColor;
+
+
+
+        // Box style
+
+        boxStyle = new GUIStyle(EditorStyles.helpBox);
+
+        boxStyle.padding = new RectOffset(15, 15, 15, 15);
+
+        // Add margin for better spacing
+
+        boxStyle.margin = new RectOffset(0, 0, 10, 10);
+
+
+
+        // Warning style
+
+        warningStyle = new GUIStyle(EditorStyles.helpBox);
+
+        warningStyle.fontSize = 11;
+
+        warningStyle.padding = new RectOffset(30, 10, 10, 10);
+
+
+
+        // Success style
+
+        successStyle = new GUIStyle(EditorStyles.helpBox);
+
+        successStyle.fontSize = 11;
+
+        successStyle.padding = new RectOffset(30, 10, 10, 10);
+
+
+
+        // Create textures
+
+        validTexture = CreateTexture(successColor);
+
+        invalidTexture = CreateTexture(errorColor);
+
+
+
+        // Icon textures
+
+        successIconTexture = EditorGUIUtility.IconContent("d_Collab").image as Texture2D;
+
+        warningIconTexture = EditorGUIUtility.IconContent("console.warnicon").image as Texture2D;
+
+        infoIconTexture = EditorGUIUtility.IconContent("d_UnityEditor.InspectorWindow").image as Texture2D;
+
+    }
+
+
+
+    private Texture2D CreateTexture(Color color)
+    {
+        Texture2D tex = new Texture2D(16, 16);
+        Color[] colors = new Color[16 * 16];
+        for (int i = 0; i < colors.Length; i++)
         {
-            foldoutAnimValues[key] = targetValue;
+            colors[i] = color;
         }
-        float currentValue = foldoutAnimValues[key];
-        if (!Mathf.Approximately(currentValue, targetValue))
+        tex.SetPixels(colors);
+        tex.Apply();
+        return tex;
+    }
+
+
+
+    private Texture2D MakeColorTexture(Color color)
+    {
+        Texture2D tex = new Texture2D(1, 1);
+        tex.SetPixel(0, 0, color);
+        tex.Apply();
+        return tex;
+    }
+
+
+
+    public override void OnInspectorGUI()
+    {
+        // Initialize styles
+        InitializeStyles();
+        serializedObject.Update();
+
+
+
+        // Store original colors
+
+        Color originalBgColor = GUI.backgroundColor;
+        Color originalContentColor = GUI.contentColor;
+
+
+
+        DrawHeader();
+        DrawProgressBar();
+        DrawTabs();
+
+
+
+        // Draw tab content
+
+        EditorGUILayout.BeginVertical(boxStyle);
+        switch (currentTab)
         {
-            foldoutAnimValues[key] = Mathf.MoveTowards(currentValue, targetValue, Time.deltaTime * FOLDOUT_ANIM_SPEED);
-            needsRepaint = true;
+            case 0: DrawModeTab(); break;
+            case 1: DrawTilesTab(); break;
+            case 2: DrawRoomsTab(); break;
+            case 3: DrawEntitiesTab(); break;
+            case 4: DrawGenerateTab(); break;
+        }
+        EditorGUILayout.EndVertical();
+
+
+
+        // Draw feedback message if any
+
+        if (showFeedback)
+        {
+            EditorGUILayout.Space(10);
+            DrawFeedbackMessage();
+        }
+
+
+
+        // Apply changes
+
+        if (GUI.changed)
+        {
+            serializedObject.ApplyModifiedProperties();
+            UpdateSetupProgress();
+        }
+
+
+
+        // Restore original colors
+
+        GUI.backgroundColor = originalBgColor;
+        GUI.contentColor = originalContentColor;
+    }
+
+
+
+    private void DrawHeader()
+    {
+        EditorGUILayout.Space(5);
+
+
+
+        // Header background
+
+        Rect headerRect = GUILayoutUtility.GetRect(GUIContent.none, headerStyle, GUILayout.Height(35));
+        EditorGUI.DrawRect(headerRect, EditorGUIUtility.isProSkin ?
+
+            new Color(0.18f, 0.22f, 0.25f) : new Color(0.8f, 0.82f, 0.85f));
+
+
+
+        // Header title
+
+        GUI.Label(headerRect, "PCG Level Generator", headerStyle);
+
+
+
+        // Version and credit info
+
+        GUIStyle creditStyle = new GUIStyle(EditorStyles.miniLabel);
+        creditStyle.alignment = TextAnchor.MiddleCenter;
+        creditStyle.normal.textColor = EditorGUIUtility.isProSkin ?
+
+            new Color(0.7f, 0.7f, 0.7f) : new Color(0.4f, 0.4f, 0.4f);
+
+
+
+        EditorGUILayout.LabelField("v1.0 • Developed by Dineshkumar & Kamalanathan", creditStyle);
+        EditorGUILayout.Space(10);
+    }
+
+
+
+    private void DrawProgressBar()
+    {
+        EditorGUILayout.BeginHorizontal();
+
+
+
+        // Calculate progress
+
+        int completedSteps = 0;
+        for (int i = 0; i < setupComplete.Length; i++)
+        {
+            if (setupComplete[i]) completedSteps++;
+        }
+        float progress = completedSteps / (float)setupComplete.Length;
+
+
+
+        // Draw bar background
+
+        Rect progressRect = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none, GUILayout.Height(5), GUILayout.ExpandWidth(true));
+        EditorGUI.DrawRect(progressRect, new Color(0.3f, 0.3f, 0.3f, 0.5f));
+
+
+
+        // Draw progress fill
+
+        Rect fillRect = new Rect(progressRect.x, progressRect.y, progressRect.width * progress, progressRect.height);
+        EditorGUI.DrawRect(fillRect, successColor);
+
+
+
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(8);
+    }
+
+
+
+    private void DrawTabs()
+    {
+        EditorGUILayout.BeginHorizontal();
+
+
+
+        GUIStyle guideStyle = new GUIStyle(EditorStyles.miniLabel);
+        guideStyle.alignment = TextAnchor.MiddleCenter;
+
+
+
+        // Draw tab buttons
+
+        for (int i = 0; i < tabNames.Length; i++)
+        {
+            // Determine if tab is enabled
+            bool isActive = currentTab == i;
+            bool isEnabled = (i == 0) || (i < 4 && setupComplete[i - 1]) || (i == 4 && completedAllMandatory());
+
+
+
+            // Set color and style
+
+            GUI.backgroundColor = GetTabColor(i, isActive, isEnabled);
+            GUIStyle style = isActive ? activeTabStyle : tabStyle;
+
+
+
+            // Draw the tab
+
+            EditorGUI.BeginDisabledGroup(!isEnabled);
+            if (GUILayout.Button(tabNames[i], style))
+            {
+                currentTab = i;
+                GUI.FocusControl(null);
+            }
+            EditorGUI.EndDisabledGroup();
+
+
+
+            // Show completion status
+
+            if (i < 4 && setupComplete[i])
+            {
+                Rect lastRect = GUILayoutUtility.GetLastRect();
+                Rect checkRect = new Rect(lastRect.x + lastRect.width - 15, lastRect.y + 2, 12, 12);
+                GUI.DrawTexture(checkRect, successIconTexture);
+            }
+        }
+
+
+
+        GUI.backgroundColor = Color.white;
+        EditorGUILayout.EndHorizontal();
+
+
+
+        EditorGUILayout.Space(5);
+    }
+
+
+
+    private Color GetTabColor(int tabIndex, bool isActive, bool isEnabled)
+    {
+        if (!isEnabled) return Color.gray;
+        if (isActive) return accentColor;
+
+
+
+        // Pulse current incomplete tab
+
+        if (tabIndex < 4 && !setupComplete[tabIndex])
+        {
+            float pulse = 0.5f + 0.5f * Mathf.Sin(pulseTime);
+            return Color.Lerp(Color.white, new Color(0.9f, 0.9f, 0.6f), pulse * 0.3f);
+        }
+
+
+
+        return Color.white;
+    }
+
+
+
+    #region TAB CONTENT METHODS
+
+
+    private void DrawModeTab()
+
+    {
+
+        // Add mode indicator at the top
+
+        DrawModeIndicator();
+
+
+
+        // Add top navigation button (just Next since this is the first tab)
+
+        EditorGUILayout.BeginHorizontal();
+
+        GUILayout.FlexibleSpace();
+
+        Color originalBg = GUI.backgroundColor;
+
+        GUI.backgroundColor = accentColor;
+
+        if (GUILayout.Button("Next: Tiles & Tilemaps →", GUILayout.Width(150)))
+
+        {
+
+            currentTab = 1;
+
+        }
+
+        GUI.backgroundColor = originalBg;
+
+        EditorGUILayout.EndHorizontal();
+
+
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Original content
+
+        EditorGUILayout.LabelField("Step 1: Choose Generation Mode", headerStyle);
+
+        EditorGUILayout.Space(5);
+
+
+
+        EditorGUILayout.HelpBox("Select the type of level generation that best fits your game. Each mode offers different levels of procedural content and control.", MessageType.Info);
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Get current mode
+
+        GenerationMode currentMode = (GenerationMode)generationModeProp.enumValueIndex;
+
+
+
+        // Draw mode selection
+
+        EditorGUILayout.BeginVertical();
+
+
+
+        // Draw each mode button
+
+        DrawModeButton(GenerationMode.FullyProcedural, "Fully Procedural",
+
+            "Classic procedural dungeons using BSP algorithm with rectangular rooms.",
+
+            currentMode == GenerationMode.FullyProcedural, new Color(0.2f, 0.6f, 0.9f, 0.8f));
+
+
+
+        DrawModeButton(GenerationMode.HybridProcedural, "Hybrid Procedural",
+
+            "Mix of BSP generation with L-shapes & room templates for more variety.",
+
+            currentMode == GenerationMode.HybridProcedural, new Color(0.9f, 0.6f, 0.2f, 0.8f));
+
+
+
+        DrawModeButton(GenerationMode.UserDefinedLayout, "User Defined Layout",
+
+            "Design your level layout visually using the Visual Level Designer.",
+
+            currentMode == GenerationMode.UserDefinedLayout, new Color(0.2f, 0.7f, 0.4f, 0.8f));
+
+
+
+        EditorGUILayout.EndVertical();
+
+
+
+        // Special case for User Defined mode - show visual designer button
+
+        if (currentMode == GenerationMode.UserDefinedLayout)
+
+        {
+
+            EditorGUILayout.Space(10);
+
+            Color origBg = GUI.backgroundColor;
+
+            GUI.backgroundColor = new Color(0.2f, 0.7f, 0.4f);
+
+
+
+            if (GUILayout.Button(new GUIContent(" Open Visual Level Designer", EditorGUIUtility.IconContent("d_EditCollider").image), GUILayout.Height(30)))
+
+            {
+
+                OpenVisualDesigner();
+
+            }
+
+
+
+            GUI.backgroundColor = origBg;
+
+        }
+
+
+
+        // Navigation buttons (bottom)
+
+        EditorGUILayout.Space(15);
+
+        DrawNavigationButtons(null, "Next: Tiles & Tilemaps →", null, () => { currentTab = 1; });
+
+
+
+        // Mark this step complete regardless of selection
+
+        setupComplete[0] = true;
+
+    }
+
+
+
+
+    private void DrawModeButton(GenerationMode mode, string title, string description, bool isSelected, Color color)
+    {
+        // Store original colors
+        Color originalBg = GUI.backgroundColor;
+
+
+
+        // Create button style
+
+        GUIStyle buttonStyle = new GUIStyle(EditorStyles.helpBox);
+        buttonStyle.padding = new RectOffset(15, 15, 10, 10);
+        buttonStyle.margin = new RectOffset(0, 0, 5, 5);
+
+
+
+        // Set button color
+
+        if (isSelected)
+
+        {
+            float pulse = 0.8f + 0.2f * Mathf.Sin(pulseTime);
+            GUI.backgroundColor = Color.Lerp(color, color * 1.2f, pulse);
+        }
+        else
+        {
+            GUI.backgroundColor = new Color(0.8f, 0.8f, 0.8f, 0.2f);
+        }
+
+
+
+        // Create the button
+
+        EditorGUILayout.BeginVertical(buttonStyle);
+
+
+
+        // Mode selection radio button
+
+        EditorGUILayout.BeginHorizontal();
+        bool newSelection = EditorGUILayout.Toggle(isSelected, GUILayout.Width(20));
+        if (newSelection != isSelected && newSelection == true)
+        {
+            generationModeProp.enumValueIndex = (int)mode;
+            GUI.FocusControl(null);
+        }
+
+
+
+        // Mode title
+
+        GUIStyle titleStyle = new GUIStyle(EditorStyles.boldLabel);
+        titleStyle.fontSize = 13;
+        EditorGUILayout.LabelField(title, titleStyle);
+        EditorGUILayout.EndHorizontal();
+
+
+
+        // Mode description
+
+        GUIStyle descStyle = new GUIStyle(EditorStyles.label);
+        descStyle.wordWrap = true;
+        EditorGUILayout.LabelField(description, descStyle);
+
+
+
+        EditorGUILayout.EndVertical();
+        GUI.backgroundColor = originalBg;
+    }
+
+
+
+    private void DrawTilesTab()
+
+    {
+
+        // Add mode indicator at the top
+
+        DrawModeIndicator();
+
+
+
+        // Add top navigation buttons
+
+        EditorGUILayout.BeginHorizontal();
+
+        Color originalBg = GUI.backgroundColor;
+
+        if (GUILayout.Button("← Back: Mode", GUILayout.Width(150)))
+
+        {
+
+            currentTab = 0;
+
+        }
+
+        GUILayout.FlexibleSpace();
+
+        GUI.backgroundColor = accentColor;
+
+        if (GUILayout.Button("Next: Room Settings →", GUILayout.Width(150)))
+
+        {
+
+            currentTab = 2;
+
+        }
+
+        GUI.backgroundColor = originalBg;
+
+        EditorGUILayout.EndHorizontal();
+
+
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Original content
+
+        EditorGUILayout.LabelField("Step 2: Configure Tiles & Tilemaps", headerStyle);
+
+        EditorGUILayout.Space(5);
+
+
+
+        EditorGUILayout.HelpBox("Assign the required tilemaps and tiles for level generation. These are essential for creating the visual elements of your level.", MessageType.Info);
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Check if essential components are assigned
+
+        bool tilemapsAssigned = groundTilemapProp.objectReferenceValue != null &&
+
+                               wallTilemapProp.objectReferenceValue != null;
+
+        bool tilesAssigned = floorTileProp.objectReferenceValue != null &&
+
+                            wallTileProp.objectReferenceValue != null;
+
+
+
+        // Auto-assign button (Initialize Assets)
+
+        Color origBg = GUI.backgroundColor;
+
+        GUI.backgroundColor = new Color(0.3f, 0.5f, 0.9f);
+
+
+
+        if (GUILayout.Button(new GUIContent(" Initialize Assets",
+
+                                         EditorGUIUtility.IconContent("d_Refresh").image),
+
+                          GUILayout.Height(30)))
+
+        {
+
+            bool proceed = EditorUtility.DisplayDialog("Initialize Assets",
+
+                "This will search for and auto-assign assets from standard folders:\n\n" +
+
+                "• Basic Tiles from main Tiles folder\n" +
+
+                "• Directional Wall Tiles from subfolders\n" +
+
+                "• Entity prefabs from Prefabs folder\n\n" +
+
+                "This WILL overwrite any existing assignments. Continue?",
+
+                "Initialize", "Cancel");
+
+
+
+            if (proceed)
+
+            {
+
+                InitializeAssets();
+
+            }
+
+        }
+
+
+
+        GUI.backgroundColor = origBg;
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Required Tilemaps Section
+
+        DrawSectionHeader("Required Tilemaps",
+
+                        tilemapsAssigned ? successIconTexture : warningIconTexture);
+
+
+
+        EditorGUILayout.PropertyField(groundTilemapProp, new GUIContent("Ground Tilemap",
+
+                                                              "Tilemap for floor tiles"));
+
+        EditorGUILayout.PropertyField(wallTilemapProp, new GUIContent("Wall Tilemap",
+
+                                                           "Tilemap for wall tiles"));
+
+
+
+        if (!tilemapsAssigned)
+
+        {
+
+            DrawWarning("Both Ground and Wall Tilemaps must be assigned");
+
+        }
+
+
+
+        EditorGUILayout.Space(15);
+
+
+
+        // Required Tiles Section
+
+        DrawSectionHeader("Required Tiles",
+
+                        tilesAssigned ? successIconTexture : warningIconTexture);
+
+
+
+        EditorGUILayout.PropertyField(floorTileProp, new GUIContent("Floor Tile",
+
+                                                         "Basic floor/ground tile"));
+
+        EditorGUILayout.PropertyField(wallTileProp, new GUIContent("Wall Tile",
+
+                                                       "Basic wall tile"));
+
+
+
+        if (!tilesAssigned)
+
+        {
+
+            DrawWarning("Both Floor and Wall Tiles must be assigned");
+
+        }
+
+
+
+        EditorGUILayout.Space(15);
+
+
+
+        // Optional: Directional Walls Section
+
+        DrawSectionHeader("Directional Walls (Optional)", null);
+
+
+
+        EditorGUILayout.PropertyField(useDirectionalWallsProp,
+
+                               new GUIContent("Use Directional Walls",
+
+                                           "Enable to use different tiles for walls based on orientation"));
+
+
+
+        if (useDirectionalWallsProp.boolValue)
+
+        {
+
+            EditorGUI.indentLevel++;
+
+
+
+            // Basic Wall Directions
+
+            EditorGUILayout.LabelField("Basic Wall Directions", EditorStyles.boldLabel);
+
+            DrawDirectionalTileField("Bottom Wall", wallTileBottomProp);
+
+            DrawDirectionalTileField("Top Wall", wallTileTopProp);
+
+            DrawDirectionalTileField("Left Wall", wallTileLeftProp);
+
+            DrawDirectionalTileField("Right Wall", wallTileRightProp);
+
+
+
+            // Inner Corners (collapsible)
+
+            showInnerCornersFoldout = EditorGUILayout.Foldout(showInnerCornersFoldout, "Inner Corner Tiles", true);
+
+            if (showInnerCornersFoldout)
+
+            {
+
+                DrawDirectionalTileField("Inner Top-Left", wallTileInnerTopLeftProp);
+
+                DrawDirectionalTileField("Inner Top-Right", wallTileInnerTopRightProp);
+
+                DrawDirectionalTileField("Inner Bottom-Left", wallTileInnerBottomLeftProp);
+
+                DrawDirectionalTileField("Inner Bottom-Right", wallTileInnerBottomRightProp);
+
+            }
+
+
+
+            // Outer Corners (collapsible)
+
+            showOuterCornersFoldout = EditorGUILayout.Foldout(showOuterCornersFoldout, "Outer Corner Tiles", true);
+
+            if (showOuterCornersFoldout)
+
+            {
+
+                DrawDirectionalTileField("Outer Top-Left", wallTileOuterTopLeftProp);
+
+                DrawDirectionalTileField("Outer Top-Right", wallTileOuterTopRightProp);
+
+                DrawDirectionalTileField("Outer Bottom-Left", wallTileOuterBottomLeftProp);
+
+                DrawDirectionalTileField("Outer Bottom-Right", wallTileOuterBottomRightProp);
+
+            }
+
+
+
+            EditorGUI.indentLevel--;
+
+        }
+
+
+
+        EditorGUILayout.Space(15);
+
+
+
+        // Optional: Tile Variants Section
+
+        DrawSectionHeader("Tile Variants (Optional)", null);
+
+
+
+        EditorGUILayout.PropertyField(floorTileVariantsProp,
+
+                               new GUIContent("Floor Variants",
+
+                                           "Additional floor tiles to use randomly"));
+
+
+
+        EditorGUILayout.PropertyField(wallTileVariantsProp,
+
+                               new GUIContent("Wall Variants",
+
+                                           "Additional wall tiles to use randomly"));
+
+
+
+        EditorGUILayout.Slider(variantTileChanceProp, 0f, 1f,
+
+                            new GUIContent("Variant Chance",
+
+                                         "Chance to use variant tiles (0-1)"));
+
+
+
+        // Navigation buttons (bottom)
+
+        EditorGUILayout.Space(15);
+
+        DrawNavigationButtons("← Back: Mode", "Next: Room Settings →",
+
+                            () => { currentTab = 0; }, () => { currentTab = 2; });
+
+
+
+        // Mark completion status
+
+        setupComplete[1] = tilemapsAssigned && tilesAssigned;
+
+    }
+
+
+
+    private void DrawRoomsTab()
+
+    {
+
+        // Add mode indicator at the top
+
+        DrawModeIndicator();
+
+
+
+        // Add top navigation buttons
+
+        EditorGUILayout.BeginHorizontal();
+
+        Color topNavBgColor = GUI.backgroundColor;
+
+        if (GUILayout.Button("← Back: Tiles", GUILayout.Width(150)))
+
+        {
+
+            currentTab = 1;
+
+        }
+
+        GUILayout.FlexibleSpace();
+
+        GUI.backgroundColor = accentColor;
+
+        if (GUILayout.Button("Next: Entities →", GUILayout.Width(150)))
+
+        {
+
+            currentTab = 3;
+
+        }
+
+        GUI.backgroundColor = topNavBgColor;
+
+        EditorGUILayout.EndHorizontal();
+
+
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Original content
+
+        EditorGUILayout.LabelField("Step 3: Configure Room Settings", headerStyle);
+
+        EditorGUILayout.Space(5);
+
+
+
+        GenerationMode currentMode = (GenerationMode)generationModeProp.enumValueIndex;
+
+
+
+        string helpText = "Configure how rooms are generated and connected. ";
+
+        if (currentMode == GenerationMode.FullyProcedural)
+
+            helpText += "In Fully Procedural mode, these settings control the BSP algorithm.";
+
+        else if (currentMode == GenerationMode.HybridProcedural)
+
+            helpText += "In Hybrid mode, these control BSP, L-shapes, and room templates.";
+
+        else
+
+            helpText += "In User Defined mode, these settings affect corridor generation.";
+
+
+
+        EditorGUILayout.HelpBox(helpText, MessageType.Info);
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Level Dimensions Section
+
+        DrawSectionHeader("Level Dimensions", null);
+
+
+
+        EditorGUILayout.PropertyField(levelWidthProp,
+
+                               new GUIContent("Level Width", "Width of level grid in cells"));
+
+        EditorGUILayout.PropertyField(levelHeightProp,
+
+                               new GUIContent("Level Height", "Height of level grid in cells"));
+
+
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Random Seed Section
+
+        DrawSectionHeader("Random Seed", null);
+
+
+
+        EditorGUILayout.PropertyField(useRandomSeedProp,
+
+                               new GUIContent("Use Random Seed", "Generate new seed on each run"));
+
+
+
+        EditorGUI.BeginDisabledGroup(useRandomSeedProp.boolValue);
+
+        EditorGUILayout.BeginHorizontal();
+
+        EditorGUILayout.PropertyField(seedProp, new GUIContent("Seed Value", "Manual seed value"));
+
+
+
+        if (GUILayout.Button("New", GUILayout.Width(50)))
+
+        {
+
+            seedProp.intValue = UnityEngine.Random.Range(1, 999999);
+
+            serializedObject.ApplyModifiedProperties();
+
+            ShowFeedback($"New seed: {seedProp.intValue}", MessageType.Info);
+
+        }
+
+
+
+        EditorGUILayout.EndHorizontal();
+
+        EditorGUI.EndDisabledGroup();
+
+
+
+        EditorGUILayout.Space(15);
+
+
+
+        // Mode-specific settings
+
+        if (currentMode != GenerationMode.UserDefinedLayout)
+
+        {
+
+            // BSP Settings
+
+            DrawSectionHeader("BSP Algorithm Settings", null);
+
+
+
+            EditorGUILayout.PropertyField(minRoomSizeProp,
+
+                                   new GUIContent("Min Room Size", "Minimum room dimension"));
+
+            EditorGUILayout.PropertyField(maxIterationsProp,
+
+                                   new GUIContent("BSP Iterations", "Number of BSP split iterations"));
+
+            EditorGUILayout.PropertyField(roomPaddingProp,
+
+                                   new GUIContent("Room Padding", "Space between rooms"));
+
+
+
+            EditorGUILayout.Space(15);
+
+        }
+
+
+
+        // Hybrid-specific settings
+
+        if (currentMode == GenerationMode.HybridProcedural)
+
+        {
+
+            // Shape Probabilities
+
+            DrawSectionHeader("Room Type Probabilities", null);
+
+
+
+            EditorGUILayout.Slider(lShapeProbabilityProp, 0f, 1f,
+
+                                new GUIContent("L-Shape Chance", "Probability for L-shaped rooms"));
+
+            EditorGUILayout.Slider(roomTemplateProbabilityProp, 0f, 1f,
+
+                                new GUIContent("Template Chance", "Probability for template rooms"));
+
+
+
+            float totalProb = lShapeProbabilityProp.floatValue + roomTemplateProbabilityProp.floatValue;
+
+            if (totalProb > 1.0f)
+
+            {
+
+                DrawWarning("Combined probabilities exceed 100%. Remaining will be rectangles.");
+
+            }
+
+
+
+            // L-Shape Settings
+
+            EditorGUILayout.Space(10);
+
+            EditorGUILayout.LabelField("L-Shape Settings", EditorStyles.boldLabel);
+
+
+
+            EditorGUILayout.Slider(minLLegRatioProp, 0.2f, 0.8f,
+
+                                new GUIContent("Min Leg Ratio", "Minimum ratio of short leg"));
+
+            EditorGUILayout.Slider(maxLLegRatioProp, minLLegRatioProp.floatValue, 0.8f,
+
+                                new GUIContent("Max Leg Ratio", "Maximum ratio of short leg"));
+
+
+
+            // Room Templates
+
+            EditorGUILayout.Space(10);
+
+            EditorGUILayout.LabelField("Room Templates", EditorStyles.boldLabel);
+
+
+
+            // Show number of valid templates
+
+            int totalTemplates = roomTemplatePrefabsProp.arraySize;
+
+            int validTemplates = CountValidTemplates();
+
+
+
+            EditorGUILayout.LabelField($"Template Status: {validTemplates}/{totalTemplates} valid",
+
+                                    EditorStyles.boldLabel);
+
+
+
+            // Template list
+
+            if (roomTemplatePrefabsProp.arraySize > 0)
+
+            {
+
+                EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+
+
+                for (int i = 0; i < roomTemplatePrefabsProp.arraySize; i++)
+
+                {
+
+                    DrawTemplateElement(roomTemplatePrefabsProp.GetArrayElementAtIndex(i), i);
+
+                }
+
+
+
+                EditorGUILayout.Space(5);
+
+
+
+                if (GUILayout.Button("+ Add Template"))
+
+                {
+
+                    roomTemplatePrefabsProp.arraySize++;
+
+                }
+
+
+
+                EditorGUILayout.EndVertical();
+
+            }
+
+            else
+
+            {
+
+                EditorGUILayout.HelpBox("No template prefabs assigned. These should contain a Tilemap component.", MessageType.Info);
+
+
+
+                if (GUILayout.Button("+ Add First Template"))
+
+                {
+
+                    roomTemplatePrefabsProp.arraySize = 1;
+
+                }
+
+            }
+
+
+
+            EditorGUILayout.Space(15);
+
+        }
+
+
+
+        // Corridor Settings for all modes
+
+        DrawSectionHeader("Corridor Settings", null);
+
+
+
+        EditorGUILayout.PropertyField(corridorWidthProp,
+
+                               new GUIContent("Corridor Width", "Width of corridors in tiles"));
+
+
+
+        // User Defined specific settings
+
+        if (currentMode == GenerationMode.UserDefinedLayout)
+
+        {
+
+            EditorGUILayout.Space(10);
+
+            EditorGUILayout.PropertyField(defaultSceneNodeSizeProp,
+
+                                   new GUIContent("Default Node Size",
+
+                                               "Default size for nodes in Visual Designer"));
+
+
+
+            EditorGUILayout.Space(10);
+
+            Color bottomButtonBgColor = GUI.backgroundColor;
+
+            GUI.backgroundColor = new Color(0.2f, 0.7f, 0.4f);
+
+
+
+            if (GUILayout.Button(new GUIContent(" Open Visual Level Designer",
+
+                                             EditorGUIUtility.IconContent("d_EditCollider").image),
+
+                              GUILayout.Height(30)))
+
+            {
+
+                OpenVisualDesigner();
+
+            }
+
+
+
+            GUI.backgroundColor = bottomButtonBgColor;
+
+        }
+
+
+
+        // Navigation buttons
+
+        EditorGUILayout.Space(15);
+
+        DrawNavigationButtons("← Back: Tiles", "Next: Entities →",
+
+                            () => { currentTab = 1; }, () => { currentTab = 3; });
+
+
+
+        // Mark completion status - valid settings
+
+        setupComplete[2] = (levelWidthProp.intValue > 0 && levelHeightProp.intValue > 0);
+
+    }
+
+
+
+    private void DrawEntitiesTab()
+
+    {
+
+        // Add mode indicator at the top
+
+        DrawModeIndicator();
+
+
+
+        // Add top navigation buttons
+
+        EditorGUILayout.BeginHorizontal();
+
+        Color topNavBgColor = GUI.backgroundColor;
+
+        if (GUILayout.Button("← Back: Rooms", GUILayout.Width(150)))
+
+        {
+
+            currentTab = 2;
+
+        }
+
+        GUILayout.FlexibleSpace();
+
+        GUI.backgroundColor = accentColor;
+
+        if (GUILayout.Button("Next: Generate →", GUILayout.Width(150)))
+
+        {
+
+            currentTab = 4;
+
+        }
+
+        GUI.backgroundColor = topNavBgColor;
+
+        EditorGUILayout.EndHorizontal();
+
+
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Original content
+
+        EditorGUILayout.LabelField("Step 4: Configure Entities", headerStyle);
+
+        EditorGUILayout.Space(5);
+
+
+
+        EditorGUILayout.HelpBox("Set up the entities that will populate your level. The player prefab is required, while enemies and decorations are optional.", MessageType.Info);
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Auto-assign button for entities
+
+        Color buttonBgColor = GUI.backgroundColor;
+
+        GUI.backgroundColor = new Color(0.3f, 0.5f, 0.9f);
+
+
+
+        if (GUILayout.Button(new GUIContent(" Auto-Assign Entity Prefabs",
+
+                                         EditorGUIUtility.IconContent("d_Refresh").image),
+
+                          GUILayout.Height(30)))
+
+        {
+
+            AutoAssignEntityPrefabs();
+
+        }
+
+
+
+        GUI.backgroundColor = buttonBgColor;
+
+        EditorGUILayout.Space(15);
+
+
+
+        // Player Section
+
+        bool playerAssigned = playerPrefabProp.objectReferenceValue != null;
+
+        DrawSectionHeader("Player (Required)",
+
+                        playerAssigned ? successIconTexture : warningIconTexture);
+
+
+
+        EditorGUILayout.PropertyField(playerPrefabProp,
+
+                               new GUIContent("Player Prefab", "Player character prefab"));
+
+
+
+        if (!playerAssigned)
+
+        {
+
+            DrawWarning("Player prefab must be assigned");
+
+        }
+
+
+
+        EditorGUILayout.Space(15);
+
+
+
+        // Enemies Section
+
+        DrawSectionHeader("Enemies (Optional)", null);
+
+
+
+        EditorGUILayout.PropertyField(enemyPrefabProp,
+
+                               new GUIContent("Enemy Prefab", "Enemy character prefab"));
+
+        EditorGUILayout.PropertyField(enemiesPerRoomProp,
+
+                               new GUIContent("Enemies Per Room", "Maximum enemies per room"));
+
+
+
+        EditorGUILayout.Space(15);
+
+
+
+        // Decorations Section
+
+        DrawSectionHeader("Decorations (Optional)", null);
+
+
+
+        EditorGUILayout.PropertyField(decorationPrefabProp,
+
+                               new GUIContent("Decoration Prefab", "Decoration object prefab"));
+
+        EditorGUILayout.PropertyField(decorationsPerRoomProp,
+
+                               new GUIContent("Decorations Per Room", "Maximum decorations per room"));
+
+
+
+        // Navigation buttons
+
+        EditorGUILayout.Space(15);
+
+        DrawNavigationButtons("← Back: Rooms", "Next: Generate →",
+
+                            () => { currentTab = 2; }, () => { currentTab = 4; });
+
+
+
+        // Mark completion status
+
+        setupComplete[3] = playerPrefabProp.objectReferenceValue != null;
+
+    }
+
+
+
+    private void DrawGenerateTab()
+
+    {
+
+        // Add mode indicator at the top
+
+        DrawModeIndicator();
+
+
+
+        // Add top navigation buttons
+
+        EditorGUILayout.BeginHorizontal();
+
+        Color topNavBgColor = GUI.backgroundColor;
+
+        if (GUILayout.Button("← Back: Entities", GUILayout.Width(150)))
+
+        {
+
+            currentTab = 3;
+
+        }
+
+        GUILayout.FlexibleSpace();
+
+        GUI.backgroundColor = topNavBgColor;
+
+        EditorGUILayout.EndHorizontal();
+
+
+
+        EditorGUILayout.Space(10);
+
+
+
+        // Original content
+
+        EditorGUILayout.LabelField("Step 5: Generate Your Level", headerStyle);
+
+        EditorGUILayout.Space(5);
+
+
+
+        bool allRequiredComplete = completedAllMandatory();
+
+
+
+        if (allRequiredComplete)
+
+        {
+
+            GUIStyle successBox = new GUIStyle(EditorStyles.helpBox);
+
+            successBox.normal.textColor = successColor;
+
+
+
+            EditorGUILayout.BeginHorizontal(successBox);
+
+            Rect iconRect = GUILayoutUtility.GetRect(24, 24, GUILayout.Width(24));
+
+            GUI.DrawTexture(iconRect, successIconTexture);
+
+            EditorGUILayout.LabelField("All setup steps complete! You're ready to generate your level.",
+
+                                    GUILayout.ExpandWidth(true));
+
+            EditorGUILayout.EndHorizontal();
+
+        }
+
+        else
+
+        {
+
+            EditorGUILayout.HelpBox("Please complete all required setup steps before generating.",
+
+                                 MessageType.Warning);
+
+
+
+            // Show missing requirements
+
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            EditorGUILayout.LabelField("Missing Requirements:", EditorStyles.boldLabel);
+
+
+
+            if (!setupComplete[0]) EditorGUILayout.LabelField("• Select a generation mode");
+
+            if (!setupComplete[1])
+
+            {
+
+                EditorGUILayout.LabelField("• Assign required tilemaps and tiles");
+
+                if (GUILayout.Button("Go to Tiles Tab")) currentTab = 1;
+
+            }
+
+            if (!setupComplete[2])
+
+            {
+
+                EditorGUILayout.LabelField("• Configure level dimensions");
+
+                if (GUILayout.Button("Go to Rooms Tab")) currentTab = 2;
+
+            }
+
+            if (!setupComplete[3])
+
+            {
+
+                EditorGUILayout.LabelField("• Assign player prefab");
+
+                if (GUILayout.Button("Go to Entities Tab")) currentTab = 3;
+
+            }
+
+
+
+            EditorGUILayout.EndVertical();
+
+            EditorGUILayout.Space(10);
+
+        }
+
+
+
+        // Summary of current settings
+
+        EditorGUILayout.LabelField("Generation Summary", subHeaderStyle);
+
+
+
+        GenerationMode currentMode = (GenerationMode)generationModeProp.enumValueIndex;
+
+        EditorGUILayout.LabelField($"• Mode: {GetModeDisplayName(currentMode)}");
+
+        EditorGUILayout.LabelField($"• Size: {levelWidthProp.intValue}×{levelHeightProp.intValue} cells");
+
+        EditorGUILayout.LabelField($"• Seed: {(useRandomSeedProp.boolValue ? "Random" : seedProp.intValue.ToString())}");
+
+
+
+        // Display mode-specific settings
+
+        if (currentMode == GenerationMode.FullyProcedural)
+
+        {
+
+            EditorGUILayout.LabelField($"• BSP Iterations: {maxIterationsProp.intValue}");
+
+            EditorGUILayout.LabelField($"• Min Room Size: {minRoomSizeProp.intValue}");
+
+        }
+
+        else if (currentMode == GenerationMode.HybridProcedural)
+
+        {
+
+            EditorGUILayout.LabelField($"• L-Shape Chance: {lShapeProbabilityProp.floatValue:P0}");
+
+            EditorGUILayout.LabelField($"• Template Chance: {roomTemplateProbabilityProp.floatValue:P0}");
+
+            EditorGUILayout.LabelField($"• Templates: {CountValidTemplates()} valid");
+
+        }
+
+
+
+        // Generate button
+
+        EditorGUILayout.Space(20);
+
+        Color btnColor = GUI.backgroundColor;
+
+        GUI.backgroundColor = allRequiredComplete ? new Color(0.2f, 0.7f, 0.3f) : Color.gray;
+
+
+
+        GUIStyle generateStyle = new GUIStyle(GUI.skin.button);
+
+        generateStyle.fontSize = 14;
+
+        generateStyle.fontStyle = FontStyle.Bold;
+
+        generateStyle.padding = new RectOffset(20, 20, 10, 10);
+
+
+
+        EditorGUI.BeginDisabledGroup(!allRequiredComplete);
+
+        if (GUILayout.Button(new GUIContent(" Generate Level",
+
+                                         EditorGUIUtility.IconContent("d_PlayButton On").image),
+
+                          generateStyle, GUILayout.Height(50)))
+
+        {
+
+            GenerateLevel();
+
+        }
+
+        EditorGUI.EndDisabledGroup();
+
+
+
+        GUI.backgroundColor = new Color(0.9f, 0.3f, 0.3f);
+
+        if (GUILayout.Button(new GUIContent(" Clear Level",
+
+                                         EditorGUIUtility.IconContent("d_TreeEditor.Trash").image),
+
+                          GUILayout.Height(30)))
+
+        {
+
+            if (EditorUtility.DisplayDialog("Confirm Clear",
+
+                                         "Clear all generated level content?",
+
+                                         "Clear", "Cancel"))
+
+            {
+
+                ClearLevel();
+
+            }
+
+        }
+
+
+
+        GUI.backgroundColor = btnColor;
+
+
+
+        // Navigation button
+
+        EditorGUILayout.Space(15);
+
+        DrawNavigationButtons("← Back: Entities", null, () => { currentTab = 3; }, null);
+
+    }
+
+
+
+    #endregion
+
+
+    #region HELPER METHODS
+    // Add this method around line 925 in your HELPER METHODS region
+
+    private void DrawModeIndicator()
+
+    {
+
+        GenerationMode currentMode = (GenerationMode)generationModeProp.enumValueIndex;
+
+        string modeName = GetModeDisplayName(currentMode);
+
+
+
+        // Get the appropriate color for the selected mode
+
+        Color modeColor;
+
+        switch (currentMode)
+
+        {
+
+            case GenerationMode.FullyProcedural:
+
+                modeColor = new Color(0.2f, 0.6f, 0.9f, 0.8f);
+
+                break;
+
+            case GenerationMode.HybridProcedural:
+
+                modeColor = new Color(0.9f, 0.6f, 0.2f, 0.8f);
+
+                break;
+
+            case GenerationMode.UserDefinedLayout:
+
+                modeColor = new Color(0.2f, 0.7f, 0.4f, 0.8f);
+
+                break;
+
+            default:
+
+                modeColor = Color.gray;
+
+                break;
+
+        }
+
+
+
+        // Create a style for the mode indicator
+
+        GUIStyle modeStyle = new GUIStyle(EditorStyles.helpBox);
+
+        modeStyle.fontStyle = FontStyle.Bold;
+
+        modeStyle.alignment = TextAnchor.MiddleLeft;
+
+        modeStyle.padding = new RectOffset(10, 10, 8, 8);
+
+
+
+        Color originalBg = GUI.backgroundColor;
+
+        GUI.backgroundColor = modeColor;
+
+
+
+        EditorGUILayout.BeginHorizontal(modeStyle);
+
+        EditorGUILayout.LabelField($"Current Mode: {modeName}", EditorStyles.boldLabel);
+
+        GUI.backgroundColor = originalBg;
+
+        EditorGUILayout.EndHorizontal();
+
+
+
+        EditorGUILayout.Space(5);
+
+    }
+
+    private void DrawSectionHeader(string title, Texture2D statusIcon)
+    {
+        EditorGUILayout.BeginHorizontal();
+
+
+
+        // Title with bold style
+
+        GUIStyle headerStyle = new GUIStyle(EditorStyles.boldLabel);
+        headerStyle.fontSize = 12;
+        EditorGUILayout.LabelField(title, headerStyle);
+
+
+
+        // Status icon if provided
+
+        if (statusIcon != null)
+        {
+            GUILayout.FlexibleSpace();
+            Rect iconRect = GUILayoutUtility.GetRect(16, 16, GUILayout.Width(16));
+            GUI.DrawTexture(iconRect, statusIcon);
+        }
+
+
+
+        EditorGUILayout.EndHorizontal();
+
+
+
+        // Underline
+
+        Rect lineRect = GUILayoutUtility.GetRect(GUIContent.none, GUIStyle.none,
+
+                                              GUILayout.Height(1), GUILayout.ExpandWidth(true));
+        EditorGUI.DrawRect(lineRect, new Color(0.5f, 0.5f, 0.5f, 0.5f));
+
+
+
+        EditorGUILayout.Space(5);
+    }
+
+
+
+    private void DrawWarning(string message)
+    {
+        EditorGUILayout.BeginHorizontal(warningStyle);
+
+
+
+        Rect iconRect = GUILayoutUtility.GetRect(20, 20, GUILayout.Width(20));
+        GUI.DrawTexture(iconRect, warningIconTexture);
+
+
+
+        EditorGUILayout.LabelField(message, GUILayout.ExpandWidth(true));
+
+
+
+        EditorGUILayout.EndHorizontal();
+    }
+
+
+
+    private void DrawNavigationButtons(string backText, string nextText,
+
+                                    System.Action onBack, System.Action onNext)
+    {
+        EditorGUILayout.BeginHorizontal();
+
+
+
+        if (backText != null && onBack != null)
+        {
+            if (GUILayout.Button(backText, GUILayout.Width(150)))
+            {
+                onBack.Invoke();
+            }
+        }
+
+
+
+        GUILayout.FlexibleSpace();
+
+
+
+        if (nextText != null && onNext != null)
+        {
+            Color originalBg = GUI.backgroundColor;
+            GUI.backgroundColor = accentColor;
+
+
+
+            if (GUILayout.Button(nextText, GUILayout.Width(150)))
+            {
+                onNext.Invoke();
+            }
+
+
+
+            GUI.backgroundColor = originalBg;
+        }
+
+
+
+        EditorGUILayout.EndHorizontal();
+    }
+
+
+
+    private void DrawDirectionalTileField(string label, SerializedProperty directionalTileProp)
+    {
+        EditorGUILayout.BeginHorizontal();
+
+
+
+        SerializedProperty tileProp = directionalTileProp.FindPropertyRelative("tile");
+        SerializedProperty rotationProp = directionalTileProp.FindPropertyRelative("rotation");
+
+
+
+        // Tile field
+
+        EditorGUILayout.PropertyField(tileProp, new GUIContent(label),
+
+                                   GUILayout.Width(EditorGUIUtility.currentViewWidth * 0.6f));
+
+
+
+        // Rotation field
+
+        EditorGUILayout.PropertyField(rotationProp, GUIContent.none,
+
+                                   GUILayout.Width(EditorGUIUtility.currentViewWidth * 0.2f));
+
+
+
+        EditorGUILayout.EndHorizontal();
+    }
+
+
+
+    private void DrawTemplateElement(SerializedProperty templateProp, int index)
+    {
+        EditorGUILayout.BeginHorizontal();
+
+
+
+        // Get template reference
+
+        GameObject prefabRef = templateProp.objectReferenceValue as GameObject;
+        bool isValid = IsValidTemplate(prefabRef);
+
+
+
+        // Status indicator
+
+        Rect indicatorRect = GUILayoutUtility.GetRect(16, 16,
+
+                                                   GUILayout.Width(16), GUILayout.ExpandWidth(false));
+        GUI.DrawTexture(indicatorRect, isValid ? validTexture : invalidTexture);
+
+
+
+        // Template field
+
+        EditorGUILayout.PropertyField(templateProp, GUIContent.none);
+
+
+
+        // Delete button
+
+        if (GUILayout.Button("×", GUILayout.Width(20)))
+        {
+            roomTemplatePrefabsProp.DeleteArrayElementAtIndex(index);
+        }
+
+
+
+        EditorGUILayout.EndHorizontal();
+
+
+
+        // Show validation warning
+
+        if (!isValid && prefabRef != null)
+        {
+            EditorGUILayout.HelpBox("Invalid template. Must contain a Tilemap component.",
+
+                                 MessageType.Warning);
         }
     }
 
-    private void ShowFeedback(string message, MessageType type = MessageType.Info, float duration = FEEDBACK_DURATION)
+
+
+    private void DrawFeedbackMessage()
+    {
+        GUIStyle style;
+        Texture2D icon;
+
+
+
+        // Determine style and icon based on message type
+
+        switch (feedbackType)
+        {
+            case MessageType.Info:
+                style = new GUIStyle(EditorStyles.helpBox);
+                icon = infoIconTexture;
+                break;
+            case MessageType.Warning:
+                style = new GUIStyle(EditorStyles.helpBox);
+                style.normal.textColor = warningColor;
+                icon = warningIconTexture;
+                break;
+            case MessageType.Error:
+                style = new GUIStyle(EditorStyles.helpBox);
+                style.normal.textColor = errorColor;
+                icon = EditorGUIUtility.IconContent("console.erroricon").image as Texture2D;
+                break;
+            default:
+                style = new GUIStyle(EditorStyles.helpBox);
+                icon = infoIconTexture;
+                break;
+        }
+
+
+
+        // Draw feedback box
+
+        EditorGUILayout.BeginHorizontal(style);
+
+
+
+        Rect iconRect = GUILayoutUtility.GetRect(20, 20, GUILayout.Width(20));
+        GUI.DrawTexture(iconRect, icon);
+
+
+
+        EditorGUILayout.LabelField(feedbackMessage, GUILayout.ExpandWidth(true));
+
+
+
+        // Close button
+
+        if (GUILayout.Button("×", GUILayout.Width(20)))
+        {
+            showFeedback = false;
+        }
+
+
+
+        EditorGUILayout.EndHorizontal();
+    }
+
+
+
+    private void ShowFeedback(string message, MessageType type, float duration = 3.5f)
     {
         feedbackMessage = message;
         feedbackType = type;
@@ -284,868 +2274,1217 @@ public class HybridLevelGeneratorEditor : Editor
         Repaint();
     }
 
-    private bool AreCoreComponentsAssigned()
+
+
+    private void UpdateSetupProgress()
     {
-        return groundTilemapProp.objectReferenceValue != null &&
-               wallTilemapProp.objectReferenceValue != null &&
-               floorTileProp.objectReferenceValue != null &&
-               wallTileProp.objectReferenceValue != null;
-    }
+        // Update setup progress for each step
+        HybridLevelGenerator generator = (HybridLevelGenerator)target;
 
-    public override void OnInspectorGUI()
-    {
-        InitializeStylesAndColors();
-        serializedObject.Update();
 
-        Color originalBgColor = GUI.backgroundColor;
-        Color originalContentColor = GUI.contentColor;
-        GUI.contentColor = EditorGUIUtility.isProSkin ? Color.white * 0.9f : Color.black * 0.9f; // Slightly adjust default text color
 
-        EditorGUI.BeginChangeCheck();
+        // Step 1: Mode selection - always considered complete
 
-        DrawHeader();
-        DrawGenerationModeSelector();
+        setupComplete[0] = true;
 
-        bool coreComponentsOk = AreCoreComponentsAssigned();
-        if (!coreComponentsOk)
+
+
+        // Step 2: Tiles & Tilemaps
+
+        setupComplete[1] = generator.groundTilemap != null &&
+
+                         generator.wallTilemap != null &&
+
+                         generator.floorTile != null &&
+
+                         generator.wallTile != null;
+
+
+
+        // Step 3: Room settings
+
+        setupComplete[2] = generator.levelWidth > 0 && generator.levelHeight > 0;
+
+
+
+        // Step 4: Entities
+
+        setupComplete[3] = generator.playerPrefab != null;
+
+
+
+        // Set current tab to first incomplete step if not already done
+
+        if (currentTab < 4)
         {
-            EditorGUILayout.HelpBox("Essential Tilemaps or Tiles are missing! Assign Ground/Wall Tilemaps and Floor/Wall Tiles.", MessageType.Error);
-        }
-
-        // --- Main Settings Area ---
-        EditorGUILayout.BeginVertical(GUI.skin.box);
-        DrawFoldoutSection("dimensions", "Level Dimensions & Seed", ref showLevelDimensions, DrawLevelDimensionsSection);
-        GenerationMode currentMode = (GenerationMode)generationModeProp.enumValueIndex;
-        EditorGUI.BeginDisabledGroup(currentMode == GenerationMode.UserDefinedLayout);
-        if (currentMode == GenerationMode.FullyProcedural || currentMode == GenerationMode.HybridProcedural) { DrawFoldoutSection("bsp", "BSP Algorithm Settings", ref showBspSettings, DrawBspSection); }
-        if (currentMode == GenerationMode.HybridProcedural) { DrawFoldoutSection("hybrid", "Hybrid Room Settings", ref showHybridSettings, DrawHybridSection); }
-        EditorGUI.EndDisabledGroup();
-        DrawFoldoutSection("corridor", "Corridor Settings", ref showCorridorSettings, DrawCorridorSection);
-        DrawFoldoutSection("tilemap", "Tiles & Tilemaps", ref showTilemapSettings, DrawTilemapSection);
-        DrawFoldoutSection("entity", "Entities & Decorations", ref showEntitySettings, DrawEntitySection);
-        EditorGUILayout.EndVertical();
-        // --- End Main Settings Area ---
-
-        // --- Feedback Area ---
-        if (showFeedback)
-        {
-            EditorGUILayout.Space(5);
-            EditorGUILayout.HelpBox(feedbackMessage, feedbackType);
-            Rect fbRect = GUILayoutUtility.GetLastRect();
-            Color cc = GUI.contentColor;
-            GUI.contentColor = Color.grey;
-            if (GUI.Button(new Rect(fbRect.xMax - 18, fbRect.y + 1, 16, 16), "x", EditorStyles.miniButton))
+            for (int i = 0; i < setupComplete.Length; i++)
             {
-                showFeedback = false;
-            }
-            GUI.contentColor = cc;
-        }
-        // --- End Feedback Area ---
-
-        // --- Action Buttons Area ---
-        EditorGUILayout.Space(15);
-        EditorGUI.BeginDisabledGroup(!coreComponentsOk); // Disable if core refs missing
-        EditorGUILayout.BeginHorizontal();
-
-        GUI.backgroundColor = generateButtonColor;
-        if (GUILayout.Button(new GUIContent(" Generate Level", EditorGUIUtility.IconContent("d_PlayButton On").image, "Generate the level using current settings"), generateButtonStyle))
-        {
-            HybridLevelGenerator generator = (HybridLevelGenerator)target;
-            Undo.RecordObject(generator, "Generate Level Action");
-            bool skipClearFlag = (generator.generationMode == GenerationMode.UserDefinedLayout);
-            generator.GenerateLevel(skipClearFlag);
-            MarkSceneDirty(generator);
-            ShowFeedback("Level Generation Triggered!", MessageType.Info);
-        }
-
-        GUI.backgroundColor = clearButtonColor;
-        if (GUILayout.Button(new GUIContent(" Clear Level", EditorGUIUtility.IconContent("d_TreeEditor.Trash").image, "Clear generated tiles, entities, AND scene RoomNodes"), clearButtonStyle))
-        {
-            HybridLevelGenerator generator = (HybridLevelGenerator)target;
-            if (EditorUtility.DisplayDialog("Confirm Clear", "Clear generated level content AND scene design nodes (LevelDesignRoot)?", "Clear All", "Cancel"))
-            {
-                Undo.RecordObject(generator, "Clear Level");
-                generator.ClearLevel();
-                MarkSceneDirty(generator);
-                ShowFeedback("Level Cleared", MessageType.Info);
-            }
-        }
-
-        EditorGUILayout.EndHorizontal();
-        GUI.backgroundColor = originalBgColor;
-        EditorGUI.EndDisabledGroup();
-        EditorGUILayout.Space(10);
-        // --- End Action Buttons Area ---
-
-        // --- Simple Help Toggle ---
-        showHelp = EditorGUILayout.ToggleLeft(" Show Basic Help", showHelp);
-        if (showHelp)
-        {
-            EditorGUILayout.HelpBox("Workflow:\n1. Select Mode.\n2. Configure Dimensions & Settings.\n3. Assign Tilemaps & Tiles.\n4. Assign Entities (Optional).\n5. Generate Level!\n(Use Visual Designer for User Defined Layout setup).", MessageType.None);
-        }
-        // --- End Simple Help Toggle ---
-
-        if (EditorGUI.EndChangeCheck())
-        {
-            serializedObject.ApplyModifiedProperties();
-        }
-
-        GUI.backgroundColor = originalBgColor;
-        GUI.contentColor = originalContentColor; // Restore defaults
-    }
-
-    // --- Section Drawing Helpers ---
-    private void DrawHeader()
-    {
-        EditorGUILayout.Space(5);
-        Rect r = GUILayoutUtility.GetRect(GUIContent.none, headerStyle, GUILayout.Height(30));
-        EditorGUI.DrawRect(r, headerColor);
-        GUI.Label(r, "Hybrid Procedural Level Generator", headerStyle);
-        EditorGUILayout.Space(5);
-
-        // Top action buttons row
-        EditorGUILayout.BeginHorizontal();
-
-        // Initialize Assets button
-        GUIStyle actionButtonStyle = new GUIStyle(GUI.skin.button);
-        actionButtonStyle.fontStyle = FontStyle.Bold;
-        actionButtonStyle.normal.textColor = EditorGUIUtility.isProSkin ? Color.cyan : new Color(0.0f, 0.5f, 0.7f);
-
-        Color defaultBgColor = GUI.backgroundColor;
-
-        // Initialize Assets Button
-        GUI.backgroundColor = new Color(0.3f, 0.5f, 0.9f);
-        if (GUILayout.Button(new GUIContent(" Initialize Assets", EditorGUIUtility.IconContent("d_Refresh").image),
-                actionButtonStyle, GUILayout.Height(30)))
-        {
-            bool proceed = EditorUtility.DisplayDialog("Initialize Assets",
-         "This will search for and auto-assign assets from standard folders:\n\n" +
-         "• Basic Tiles from main Tiles folder (NOT from subfolders)\n" +
-         "• Directional Wall Tiles from subfolders\n" +
-         "• Entity prefabs from Prefabs folder\n\n" +
-         "This WILL overwrite any existing assignments. Continue?",
-         "Initialize", "Cancel");
-
-            if (proceed)
-            {
-                InitializeAssets();
-            }
-        }
-
-        // Generate Level Button (at top)
-        bool coreComponentsOk = AreCoreComponentsAssigned();
-        GUI.backgroundColor = generateButtonColor;
-        EditorGUI.BeginDisabledGroup(!coreComponentsOk);
-        if (GUILayout.Button(new GUIContent(" Generate Level", EditorGUIUtility.IconContent("d_PlayButton On").image),
-                            actionButtonStyle, GUILayout.Height(30)))
-        {
-            HybridLevelGenerator generator = (HybridLevelGenerator)target;
-            Undo.RecordObject(generator, "Generate Level Action");
-            bool skipClearFlag = (generator.generationMode == GenerationMode.UserDefinedLayout);
-            generator.GenerateLevel(skipClearFlag);
-            MarkSceneDirty(generator);
-            ShowFeedback("Level Generation Triggered!", MessageType.Info);
-        }
-
-        // Clear Level Button (at top)
-        GUI.backgroundColor = clearButtonColor;
-        if (GUILayout.Button(new GUIContent(" Clear Level", EditorGUIUtility.IconContent("d_TreeEditor.Trash").image),
-                            actionButtonStyle, GUILayout.Height(30)))
-        {
-            HybridLevelGenerator generator = (HybridLevelGenerator)target;
-            if (EditorUtility.DisplayDialog("Confirm Clear", "Clear generated level content AND scene design nodes (LevelDesignRoot)?", "Clear All", "Cancel"))
-            {
-                Undo.RecordObject(generator, "Clear Level");
-                generator.ClearLevel();
-                MarkSceneDirty(generator);
-                ShowFeedback("Level Cleared", MessageType.Info);
-            }
-        }
-        EditorGUI.EndDisabledGroup();
-
-        EditorGUILayout.EndHorizontal();
-
-        GUI.backgroundColor = defaultBgColor;
-
-        // Add developer credit below header
-        GUIStyle creditStyle = new GUIStyle(EditorStyles.miniLabel);
-        creditStyle.alignment = TextAnchor.MiddleCenter;
-        creditStyle.normal.textColor = EditorGUIUtility.isProSkin ? new Color(0.7f, 0.7f, 0.7f) : new Color(0.4f, 0.4f, 0.4f);
-        EditorGUILayout.LabelField("Developed by Dineshkumar & Kamalanathan", creditStyle);
-        EditorGUILayout.Space(5);
-    }
-
-    private void DrawGenerationModeSelector()
-    {
-        EditorGUILayout.LabelField("Generation Mode", EditorStyles.boldLabel);
-        int currentModeIndex = generationModeProp.enumValueIndex;
-        float pulse = 0.5f + 0.5f * Mathf.Abs(Mathf.Sin(pulseTime));
-
-        EditorGUILayout.BeginHorizontal();
-        for (int i = 0; i < modeButtonContents.Length; i++)
-        {
-            bool isSelected = currentModeIndex == i;
-            GUIStyle btnStyle = new GUIStyle(GUI.skin.button);
-            btnStyle.fixedHeight = 30;
-
-            Color normalBg = modeColors[i] * (EditorGUIUtility.isProSkin ? 0.7f : 1.0f);
-            Color selBg = modeColors[i] * (EditorGUIUtility.isProSkin ? 1.2f : 0.8f);
-            selBg.a = 1.0f;
-
-            Color txtCol = EditorGUIUtility.isProSkin ? Color.white * 0.8f : Color.black * 0.8f;
-            Color selTxtCol = EditorGUIUtility.isProSkin ? Color.white : Color.black;
-
-            if (isSelected)
-            {
-                GUI.backgroundColor = Color.Lerp(selBg, selBg * 1.15f, pulse);
-                btnStyle.normal.textColor = selTxtCol;
-                btnStyle.fontStyle = FontStyle.Bold;
-            }
-            else
-            {
-                GUI.backgroundColor = normalBg;
-                btnStyle.normal.textColor = txtCol;
-            }
-
-            if (GUILayout.Button(modeButtonContents[i], btnStyle))
-            {
-                if (generationModeProp.enumValueIndex != i)
+                if (!setupComplete[i])
                 {
-                    generationModeProp.enumValueIndex = i;
-                    ShowFeedback($"{modeButtonContents[i].text} mode selected.", MessageType.Info);
+                    currentTab = i;
+                    break;
                 }
-                GUI.FocusControl(null);
             }
         }
-
-        GUI.backgroundColor = Color.white;
-        EditorGUILayout.EndHorizontal();
-
-        EditorGUILayout.HelpBox(GetModeHelpText((GenerationMode)currentModeIndex), MessageType.Info);
-
-        if ((GenerationMode)currentModeIndex == GenerationMode.UserDefinedLayout)
-        {
-            EditorGUILayout.Space(5);
-            Color obg = GUI.backgroundColor;
-            GUI.backgroundColor = accentColor * (EditorGUIUtility.isProSkin ? 1.0f : 1.3f);
-
-            if (GUILayout.Button(new GUIContent(" Open Visual Level Designer", EditorGUIUtility.IconContent("d_EditCollider").image), GUILayout.Height(30)))
-            {
-                var win = EditorWindow.GetWindow<VisualLevelDesignEditor>("Visual Level Designer");
-                win.Show();
-                win.Focus();
-                ShowFeedback("Visual Level Designer opened.", MessageType.Info);
-            }
-
-            GUI.backgroundColor = obg;
-        }
-
-        EditorGUILayout.Space(10);
     }
 
-    // Foldout helper using FadeGroup
-    private void DrawFoldoutSection(string key, string title, ref bool foldout, Action drawContent)
+
+
+    private bool completedAllMandatory()
     {
-        EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-        bool newState = EditorGUILayout.Foldout(foldout, title, true, foldoutHeaderStyle);
-        if (newState != foldout)
-        {
-            foldout = newState;
-        }
-
-        if (foldoutAnimValues.ContainsKey(key))
-        {
-            if (EditorGUILayout.BeginFadeGroup(foldoutAnimValues[key]))
-            {
-                EditorGUI.indentLevel++;
-                EditorGUILayout.Space(5);
-                if (drawContent != null)
-                {
-                    drawContent();
-                }
-                EditorGUILayout.Space(5);
-                EditorGUI.indentLevel--;
-            }
-            EditorGUILayout.EndFadeGroup();
-        }
-
-        EditorGUILayout.EndVertical();
-        EditorGUILayout.Space(3);
+        return setupComplete[0] && setupComplete[1] && setupComplete[2] && setupComplete[3];
     }
 
-    // --- Specific Section Drawing Methods ---
-    private void DrawLevelDimensionsSection()
+
+
+    private void GenerateLevel()
     {
-        EditorGUILayout.PropertyField(levelWidthProp, new GUIContent("Level Width", "Max grid width."));
-        EditorGUILayout.PropertyField(levelHeightProp, new GUIContent("Level Height", "Max grid height."));
+        HybridLevelGenerator generator = (HybridLevelGenerator)target;
 
-        EditorGUILayout.Space(8);
-        EditorGUILayout.LabelField("Random Seed", subHeaderStyle);
-        EditorGUILayout.PropertyField(useRandomSeedProp, new GUIContent("Use Random Seed", "Use time-based seed?"));
 
-        EditorGUI.BeginDisabledGroup(useRandomSeedProp.boolValue);
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.PropertyField(seedProp, new GUIContent("Seed Value", "Manual seed."));
 
-        if (GUILayout.Button("New", EditorStyles.miniButton, GUILayout.Width(50)))
+        // Skip clear for user defined mode
+
+        bool skipClear = generator.generationMode == GenerationMode.UserDefinedLayout;
+
+
+
+        try
         {
-            seedProp.intValue = UnityEngine.Random.Range(1, 999999);
-            ShowFeedback($"New seed: {seedProp.intValue}", MessageType.None, 2.0f);
+            Undo.RecordObject(generator, "Generate Level");
+            generator.GenerateLevel(skipClear);
+            ShowFeedback("Level generation complete!", MessageType.Info);
+            MarkSceneDirty(generator);
         }
-
-        EditorGUILayout.EndHorizontal();
-        EditorGUI.EndDisabledGroup();
+        catch (Exception e)
+        {
+            ShowFeedback($"Error generating level: {e.Message}", MessageType.Error);
+            Debug.LogException(e);
+        }
     }
 
-    private void DrawBspSection()
+
+
+    private void ClearLevel()
     {
-        EditorGUILayout.PropertyField(minRoomSizeProp, new GUIContent("Min Room Size", "Min width/height for BSP leaves & Rects."));
-        EditorGUILayout.PropertyField(maxIterationsProp, new GUIContent("BSP Iterations", "Number of BSP splits."));
-        EditorGUILayout.PropertyField(roomPaddingProp, new GUIContent("Room Padding", "Empty cells between procedural rooms."));
+        HybridLevelGenerator generator = (HybridLevelGenerator)target;
+
+
+
+        try
+        {
+            Undo.RecordObject(generator, "Clear Level");
+            generator.ClearLevel();
+            ShowFeedback("Level cleared successfully", MessageType.Info);
+            MarkSceneDirty(generator);
+        }
+        catch (Exception e)
+        {
+            ShowFeedback($"Error clearing level: {e.Message}", MessageType.Error);
+            Debug.LogException(e);
+        }
     }
 
-    private void DrawHybridSection()
+
+
+    private void OpenVisualDesigner()
     {
-        EditorGUILayout.LabelField("Procedural Room Chances", subHeaderStyle);
-        EditorGUILayout.PropertyField(lShapeProbabilityProp, new GUIContent("L-Shape Chance", "Chance (0-1) for proc. room = L-Shape."));
-        EditorGUILayout.PropertyField(roomTemplateProbabilityProp, new GUIContent("Template Chance", "Chance (0-1) for proc. room = Template."));
+        var window = EditorWindow.GetWindow<VisualLevelDesignEditor>("Visual Level Designer");
+        window.Show();
+        window.Focus();
+        ShowFeedback("Visual Level Designer opened", MessageType.Info);
+    }
 
-        if (lShapeProbabilityProp.floatValue + roomTemplateProbabilityProp.floatValue > 1.01f)
-        {
-            EditorGUILayout.HelpBox("Probabilities exceed 100%.", MessageType.Warning);
-        }
 
-        EditorGUILayout.Space(5);
-        EditorGUILayout.LabelField("L-Shape Leg Ratios", subHeaderStyle);
-        minLLegRatioProp.floatValue = EditorGUILayout.Slider(new GUIContent("Min Leg Ratio", "Min size ratio of smaller leg."), minLLegRatioProp.floatValue, 0.2f, 0.8f);
-        maxLLegRatioProp.floatValue = EditorGUILayout.Slider(new GUIContent("Max Leg Ratio", "Max size ratio of smaller leg."), maxLLegRatioProp.floatValue, minLLegRatioProp.floatValue, 0.8f);
 
-        EditorGUILayout.Space(8);
-        EditorGUILayout.LabelField("Room Templates List", subHeaderStyle);
+    private int CountValidTemplates()
+    {
+        int validCount = 0;
 
-        // Show number of templates with valid status
-        int totalTemplates = roomTemplatePrefabsProp.arraySize;
-        int validTemplates = 0;
 
-        for (int i = 0; i < totalTemplates; i++)
+
+        for (int i = 0; i < roomTemplatePrefabsProp.arraySize; i++)
         {
             SerializedProperty templateProp = roomTemplatePrefabsProp.GetArrayElementAtIndex(i);
-            GameObject prefabRef = templateProp.objectReferenceValue as GameObject;
-            if (IsValidTemplate(prefabRef))
+            GameObject prefab = templateProp.objectReferenceValue as GameObject;
+
+
+
+            if (IsValidTemplate(prefab))
             {
-                validTemplates++;
+                validCount++;
             }
         }
 
-        EditorGUILayout.LabelField($"Template Status: {validTemplates}/{totalTemplates} valid", EditorStyles.boldLabel);
 
-        if (roomTemplatePrefabsProp.arraySize > 0)
-        {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
-            // Draw each template with validation indicator
-            for (int i = 0; i < roomTemplatePrefabsProp.arraySize; i++)
-            {
-                DrawTemplateElement(roomTemplatePrefabsProp.GetArrayElementAtIndex(i), i);
-            }
-
-            EditorGUILayout.Space(5);
-
-            if (GUILayout.Button("+ Add Template"))
-            {
-                roomTemplatePrefabsProp.arraySize++;
-            }
-
-            EditorGUILayout.EndVertical();
-        }
-        else
-        {
-            // No templates yet
-            EditorGUILayout.HelpBox("No template prefabs assigned. These should contain a Tilemap component.", MessageType.Info);
-
-            if (GUILayout.Button("+ Add First Template"))
-            {
-                roomTemplatePrefabsProp.arraySize = 1;
-            }
-        }
-
-        EditorGUILayout.Space(5);
-        EditorGUILayout.LabelField("User Defined Node Default", subHeaderStyle);
-        EditorGUILayout.PropertyField(defaultSceneNodeSizeProp, new GUIContent("Default Node Size", "Size for UserDefined nodes if size is zero."));
+        return validCount;
     }
 
-    private void DrawTemplateElement(SerializedProperty templateProp, int index)
-    {
-        EditorGUILayout.BeginHorizontal();
 
-        // Get the template GameObject reference
-        GameObject prefabRef = templateProp.objectReferenceValue as GameObject;
-
-        // Check if template is valid for level generation
-        bool isValidTemplate = IsValidTemplate(prefabRef);
-
-        // Draw status indicator (green/red light)
-        Rect indicatorRect = GUILayoutUtility.GetRect(16, 16, GUILayout.Width(16), GUILayout.ExpandWidth(false));
-        if (isValidTemplate)
-        {
-            EditorGUI.DrawRect(indicatorRect, new Color(0.1f, 0.8f, 0.2f)); // Green
-            GUI.Label(indicatorRect, new GUIContent("", "Template will be used in level generation"));
-        }
-        else
-        {
-            EditorGUI.DrawRect(indicatorRect, new Color(0.8f, 0.2f, 0.1f)); // Red
-            GUI.Label(indicatorRect, new GUIContent("", "Template will NOT be used in level generation: Missing Tilemap or invalid setup"));
-        }
-
-        // Template field
-        EditorGUILayout.PropertyField(templateProp, GUIContent.none);
-
-        // Delete button
-        if (GUILayout.Button("×", GUILayout.Width(20)))
-        {
-            roomTemplatePrefabsProp.DeleteArrayElementAtIndex(index);
-        }
-
-        EditorGUILayout.EndHorizontal();
-
-        // Show validation message if invalid
-        if (!isValidTemplate && prefabRef != null)
-        {
-            EditorGUILayout.HelpBox("This template is invalid. Templates must contain a Tilemap component.", MessageType.Warning);
-        }
-    }
 
     private bool IsValidTemplate(GameObject prefab)
     {
-        if (prefab == null)
-            return false;
+        if (prefab == null) return false;
 
-        // Check if the prefab contains a Tilemap component
+
+
+        // Template must have a Tilemap component
+
         var tilemaps = prefab.GetComponentsInChildren<Tilemap>(true);
         return tilemaps != null && tilemaps.Length > 0;
     }
 
-    // Called when Inspector OnGUI draws
-    public override bool RequiresConstantRepaint()
+
+
+    private string GetModeDisplayName(GenerationMode mode)
     {
-        // Return true to ensure the red/green indicators update immediately
-        return true;
-    }
-
-    private void DrawCorridorSection()
-    {
-        EditorGUILayout.PropertyField(corridorWidthProp, new GUIContent("Corridor Width", "Width of corridors (in tiles)."));
-    }
-
-    private void DrawTilemapSection()
-    {
-        EditorGUILayout.LabelField("Required Tilemaps", subHeaderStyle);
-        EditorGUILayout.PropertyField(groundTilemapProp, new GUIContent("Ground Tilemap"));
-        EditorGUILayout.PropertyField(wallTilemapProp, new GUIContent("Wall Tilemap"));
-
-        EditorGUILayout.Space(8);
-        EditorGUILayout.LabelField("Required Tiles", subHeaderStyle);
-        EditorGUILayout.PropertyField(floorTileProp, new GUIContent("Floor Tile"));
-        EditorGUILayout.PropertyField(wallTileProp, new GUIContent("Wall Tile"));
-
-        // Updated directional walls section with rotation options
-        EditorGUILayout.Space(8);
-        EditorGUILayout.LabelField("Directional Wall Tiles", subHeaderStyle);
-        EditorGUILayout.PropertyField(useDirectionalWallsProp, new GUIContent("Use Directional Walls", "Enable to use different tiles for walls based on their orientation"));
-
-        if (useDirectionalWallsProp.boolValue)
+        switch (mode)
         {
-            EditorGUI.indentLevel++;
+            case GenerationMode.FullyProcedural: return "Fully Procedural";
+            case GenerationMode.HybridProcedural: return "Hybrid Procedural";
+            case GenerationMode.UserDefinedLayout: return "User Defined Layout";
+            default: return mode.ToString();
+        }
+    }
 
-            EditorGUILayout.LabelField("Basic Wall Directions", EditorStyles.boldLabel);
-            DrawDirectionalTileField("Bottom Wall Tile", "Wall with floor below (Sprite #1)", wallTileBottomProp);
-            DrawDirectionalTileField("Top Wall Tile", "Wall with floor above (Sprite #2)", wallTileTopProp);
-            DrawDirectionalTileField("Right Wall Tile", "Wall with floor on the right (Sprite #3)", wallTileRightProp);
-            DrawDirectionalTileField("Left Wall Tile", "Wall with floor on the left (Sprite #4)", wallTileLeftProp);
 
-            EditorGUILayout.Space(5);
-            EditorGUILayout.LabelField("Inner Corner Tiles", EditorStyles.boldLabel);
-            DrawDirectionalTileField("Inner Top-Left", "Inner corner with floor on left and top (Sprite #5)", wallTileInnerTopLeftProp);
-            DrawDirectionalTileField("Inner Top-Right", "Inner corner with floor on right and top (Sprite #6)", wallTileInnerTopRightProp);
-            DrawDirectionalTileField("Inner Bottom-Left", "Inner corner with floor on left and bottom (Sprite #7)", wallTileInnerBottomLeftProp);
-            DrawDirectionalTileField("Inner Bottom-Right", "Inner corner with floor on right and bottom (Sprite #8)", wallTileInnerBottomRightProp);
 
-            EditorGUILayout.Space(5);
-            EditorGUILayout.LabelField("Outer Corner Tiles", EditorStyles.boldLabel);
-            // Fixed order of outer corner tiles to match what's shown in the UI
-            DrawDirectionalTileField("Outer Top-Left", "Outer corner at top-left edge of room (Sprite #9)", wallTileOuterTopLeftProp);
-            DrawDirectionalTileField("Outer Top-Right", "Outer corner at top-right edge of room (Sprite #10)", wallTileOuterTopRightProp);
-            DrawDirectionalTileField("Outer Bottom-Left", "Outer corner at bottom-left edge of room (Sprite #11)", wallTileOuterBottomLeftProp);
-            DrawDirectionalTileField("Outer Bottom-Right", "Outer corner at bottom-right edge of room (Sprite #12)", wallTileOuterBottomRightProp);
+    private void MarkSceneDirty(HybridLevelGenerator generator)
+    {
+        if (!Application.isPlaying && generator != null && generator.gameObject != null)
+        {
+            if (generator.gameObject.scene != null &&
 
-            EditorGUI.indentLevel--;
+                generator.gameObject.scene.IsValid() &&
 
-            bool anyBasicTilesMissing =
-                wallTileLeftProp.FindPropertyRelative("tile").objectReferenceValue == null ||
-                wallTileRightProp.FindPropertyRelative("tile").objectReferenceValue == null ||
-                wallTileTopProp.FindPropertyRelative("tile").objectReferenceValue == null ||
-                wallTileBottomProp.FindPropertyRelative("tile").objectReferenceValue == null;
-
-            if (anyBasicTilesMissing)
+                generator.gameObject.scene.isLoaded)
             {
-                EditorGUILayout.HelpBox("Please assign all four basic directional wall tiles for the system to work correctly.", MessageType.Warning);
+                UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene);
             }
         }
-
-        // Keep the existing tile variants section
-        EditorGUILayout.Space(8);
-        EditorGUILayout.LabelField("Tile Variations", subHeaderStyle);
-        EditorGUILayout.PropertyField(floorTileVariantsProp, new GUIContent("Floor Tile Variants", "Additional floor tiles to randomly use during generation"));
-        EditorGUILayout.PropertyField(wallTileVariantsProp, new GUIContent("Wall Tile Variants", "Additional wall tiles to randomly use during generation"));
-        EditorGUILayout.Slider(variantTileChanceProp, 0f, 1f, new GUIContent("Variant Chance", "Chance to use a variant tile instead of the main tile (0-1)"));
-
-        if (floorTileVariantsProp.arraySize > 0 || wallTileVariantsProp.arraySize > 0)
-        {
-            EditorGUILayout.HelpBox("Tile variants will be randomly used according to the Variant Chance value.", MessageType.Info);
-        }
-
-        if (useDirectionalWallsProp.boolValue && (wallTileVariantsProp.arraySize > 0 && variantTileChanceProp.floatValue > 0))
-        {
-            EditorGUILayout.HelpBox("Note: When both Directional Walls and Wall Tile Variants are enabled, Directional Walls take precedence.", MessageType.Info);
-        }
     }
 
-    // Helper method to draw a DirectionalTile field with tile and rotation properties
-    private void DrawDirectionalTileField(string label, string tooltip, SerializedProperty directionalTileProp)
+
+
+    #endregion
+
+
+    #region ASSET INITIALIZATION METHODS
+
+    private bool TryAssignDirectionalWallTiles()
     {
-        // Begin horizontal for the directional tile row
-        EditorGUILayout.BeginHorizontal();
+        bool anyAssigned = false;
 
-        SerializedProperty tileProp = directionalTileProp.FindPropertyRelative("tile");
-        SerializedProperty rotationProp = directionalTileProp.FindPropertyRelative("rotation");
-
-        // Tile field takes 70% of the width
-        EditorGUILayout.PropertyField(tileProp, new GUIContent(label, tooltip), GUILayout.Width(EditorGUIUtility.currentViewWidth * 0.55f));
-
-        // Rotation dropdown takes 30% of the width
-        EditorGUILayout.PropertyField(rotationProp, GUIContent.none, GUILayout.Width(EditorGUIUtility.currentViewWidth * 0.25f));
-
-        EditorGUILayout.EndHorizontal();
-    }
-
-    private void DrawEntitySection()
-    {
-        EditorGUILayout.LabelField("Player", subHeaderStyle);
-        EditorGUILayout.PropertyField(playerPrefabProp, new GUIContent("Player Prefab"));
-
-        EditorGUILayout.Space(8);
-        EditorGUILayout.LabelField("Enemies", subHeaderStyle);
-        EditorGUILayout.PropertyField(enemyPrefabProp, new GUIContent("Enemy Prefab"));
-        EditorGUILayout.PropertyField(enemiesPerRoomProp, new GUIContent("Max Enemies/Room")); // Using PropertyField for Range attribute
-
-        EditorGUILayout.Space(8);
-        EditorGUILayout.LabelField("Decorations", subHeaderStyle);
-        EditorGUILayout.PropertyField(decorationPrefabProp, new GUIContent("Decoration Prefab"));
-        EditorGUILayout.PropertyField(decorationsPerRoomProp, new GUIContent("Max Decors/Room"));
-    }
-
-    // Asset initialization method
-    private void InitializeAssets()
-    {
-        // Get the target reference
-        HybridLevelGenerator generator = (HybridLevelGenerator)target;
-        Undo.RecordObject(generator, "Initialize Assets");
-        bool anyAssetsAssigned = false;
-
-        Debug.Log("=== INITIALIZING ASSETS ===");
-
-        // Clear any existing wall tile if it's a directional tile
-        if (generator.wallTile != null &&
-           (generator.wallTile.name.Contains("Bottom") ||
-            generator.wallTile.name.Contains("Top") ||
-            generator.wallTile.name.Contains("Left") ||
-            generator.wallTile.name.Contains("Right")))
+        // Array of tile searches to perform
+        var directionalTileSearches = new[]
         {
-            Debug.Log("Clearing directional wall tile: " + generator.wallTile.name);
-            generator.wallTile = null;
-        }
+        // Basic wall directions
+        new { PropertyPath = "wallTileBottom.tile", SearchTerms = new[] { "wallbottom", "wall_bottom", "wall-bottom", "bottomwall" } },
+        new { PropertyPath = "wallTileTop.tile", SearchTerms = new[] { "walltop", "wall_top", "wall-top", "topwall" } },
+        new { PropertyPath = "wallTileLeft.tile", SearchTerms = new[] { "wallleft", "wall_left", "wall-left", "leftwall" } },
+        new { PropertyPath = "wallTileRight.tile", SearchTerms = new[] { "wallright", "wall_right", "wall-right", "rightwall" } },
+        
+        // Inner corners
+        new { PropertyPath = "wallTileInnerTopLeft.tile", SearchTerms = new[] { "wallinnertopleft", "wall_inner_top_left", "inner_corner_top_left" } },
+        new { PropertyPath = "wallTileInnerTopRight.tile", SearchTerms = new[] { "wallinnertopright", "wall_inner_top_right", "inner_corner_top_right" } },
+        new { PropertyPath = "wallTileInnerBottomLeft.tile", SearchTerms = new[] { "wallinnerbottomleft", "wall_inner_bottom_left", "inner_corner_bottom_left" } },
+        new { PropertyPath = "wallTileInnerBottomRight.tile", SearchTerms = new[] { "wallinnerbottomright", "wall_inner_bottom_right", "inner_corner_bottom_right" } },
+        
+        // Outer corners
+        new { PropertyPath = "wallTileOuterTopLeft.tile", SearchTerms = new[] { "walloutertopleft", "wall_outer_top_left", "outer_corner_top_left" } },
+        new { PropertyPath = "wallTileOuterTopRight.tile", SearchTerms = new[] { "walloutertopright", "wall_outer_top_right", "outer_corner_top_right" } },
+        new { PropertyPath = "wallTileOuterBottomLeft.tile", SearchTerms = new[] { "wallouterbottomleft", "wall_outer_bottom_left", "outer_corner_bottom_left" } },
+        new { PropertyPath = "wallTileOuterBottomRight.tile", SearchTerms = new[] { "wallouterbottomright", "wall_outer_bottom_right", "outer_corner_bottom_right" } },
+    };
 
-        // 1. First try to find tiles in the Floor and Wall Tiles folder ONLY
-        string mainFolderPath = "Assets/PCGLevelGenerator/Tiles/Floor and Wall Tiles";
-        if (System.IO.Directory.Exists(Application.dataPath + mainFolderPath.Substring(6)))
+        foreach (var search in directionalTileSearches)
         {
-            // Get files only from this specific folder
-            string[] assetFiles = System.IO.Directory.GetFiles(
-                Application.dataPath + mainFolderPath.Substring(6),
-                "*.asset",
-                System.IO.SearchOption.TopDirectoryOnly);
+            SerializedProperty prop = serializedObject.FindProperty(search.PropertyPath);
+            if (prop == null) continue;
 
-            // Process all files in this folder
-            foreach (string fullPath in assetFiles)
+            foreach (string term in search.SearchTerms)
             {
-                string assetPath = "Assets" + fullPath.Substring(Application.dataPath.Length).Replace('\\', '/');
-                string fileName = System.IO.Path.GetFileNameWithoutExtension(assetPath);
-
-                // Wall Tile - check it's not a directional tile
-                if (generator.wallTile == null &&
-                    fileName.ToLower().Contains("wall") &&
-                    !fileName.Contains("Bottom") &&
-                    !fileName.Contains("Top") &&
-                    !fileName.Contains("Left") &&
-                    !fileName.Contains("Right"))
+                TileBase tile = FindTileAsset(term);
+                if (tile != null)
                 {
-                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(assetPath);
-                    if (tile != null)
-                    {
-                        generator.wallTile = tile;
-                        anyAssetsAssigned = true;
-                        Debug.Log("Assigned Wall Tile: " + tile.name);
-                    }
-                }
-
-                // Floor Tile
-                if (generator.floorTile == null && fileName.ToLower().Contains("floor"))
-                {
-                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(assetPath);
-                    if (tile != null)
-                    {
-                        generator.floorTile = tile;
-                        anyAssetsAssigned = true;
-                        Debug.Log("Assigned Floor Tile: " + tile.name);
-                    }
-                }
-            }
-        }
-
-        // 2. Find and assign Tilemaps if needed
-        if (generator.groundTilemap == null || generator.wallTilemap == null)
-        {
-            Tilemap[] tilemaps = FindObjectsByType<Tilemap>(FindObjectsSortMode.None);
-            foreach (Tilemap tilemap in tilemaps)
-            {
-                if (generator.groundTilemap == null && tilemap.name.ToLower().Contains("ground"))
-                {
-                    generator.groundTilemap = tilemap;
-                    anyAssetsAssigned = true;
-                    Debug.Log("Assigned Ground Tilemap: " + tilemap.name);
-                }
-                else if (generator.wallTilemap == null && tilemap.name.ToLower().Contains("wall"))
-                {
-                    generator.wallTilemap = tilemap;
-                    anyAssetsAssigned = true;
-                    Debug.Log("Assigned Wall Tilemap: " + tilemap.name);
-                }
-            }
-        }
-
-        // 3. Only after main tiles are assigned, load directional tiles
-        if (generator.wallTile != null)
-        {
-            LoadDirectionalTilesWithOverwrite(generator, "Basic Wall Directions");
-            LoadDirectionalTilesWithOverwrite(generator, "Inner Corner Tiles");
-            LoadDirectionalTilesWithOverwrite(generator, "Outer Corner Tiles");
-        }
-
-        // 4. Continue with the rest of your existing initialization code
-        // (Entity prefabs, etc.)
-
-        // Save changes
-        if (anyAssetsAssigned)
-        {
-            EditorUtility.SetDirty(generator);
-            MarkSceneDirty(generator);
-            ShowFeedback("Assets initialized successfully!", MessageType.Info);
-        }
-        else
-        {
-            ShowFeedback("No assets were found to assign.", MessageType.Info);
-        }
-    }
-
-
-    // Add this function to your HybridLevelGeneratorEditor.cs
-
-    private void AssignMainWallTile(HybridLevelGenerator generator)
-    {
-        // Explicitly look for wall tiles ONLY in the main "Floor and Wall Tiles" folder
-        string mainFolderPath = "Assets/PCGLevelGenerator/Tiles/Floor and Wall Tiles";
-        string[] guids = AssetDatabase.FindAssets("t:TileBase Wall", new[] { mainFolderPath });
-
-        Debug.Log($"Found {guids.Length} potential wall tiles in main folder");
-
-        foreach (string guid in guids)
-        {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-
-            // Skip ANY tiles from directional tile folders
-            if (path.Contains("Directional Tiles") ||
-                path.Contains("Basic Wall Directions") ||
-                path.Contains("Inner Corner Tiles") ||
-                path.Contains("Outer Corner Tiles"))
-            {
-                Debug.Log($"Skipping directional tile: {path}");
-                continue;
-            }
-
-            // Only process files directly in the target folder
-            string directory = System.IO.Path.GetDirectoryName(path).Replace('\\', '/');
-            if (directory != mainFolderPath)
-            {
-                Debug.Log($"Skipping tile not in target folder: {path}");
-                continue;
-            }
-
-            TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
-            if (tile != null)
-            {
-                generator.wallTile = tile;
-                Debug.Log($"ASSIGNED MAIN WALL TILE: {tile.name} from {path}");
-                return; // Exit after finding first valid tile
-            }
-        }
-
-        Debug.LogWarning("Could not find a suitable Wall Tile in the Floor and Wall Tiles folder");
-    }
-
-
-    private void SetupCameraFollow()
-    {
-        // Find or create Main Camera
-        Camera mainCamera = Camera.main;
-        if (mainCamera == null)
-        {
-            // Create a new camera if none exists
-            GameObject cameraObj = new GameObject("Main Camera");
-            cameraObj.tag = "MainCamera";
-            mainCamera = cameraObj.AddComponent<Camera>();
-            mainCamera.clearFlags = CameraClearFlags.SolidColor;
-            mainCamera.backgroundColor = new Color(0.192f, 0.301f, 0.474f);
-            mainCamera.orthographic = true;
-            mainCamera.orthographicSize = 10f;
-            mainCamera.transform.position = new Vector3(0, 0, -10);
-            Debug.Log("Created new Main Camera");
-        }
-
-        // Check if CameraFollow script is already attached
-        CameraFollow existingScript = mainCamera.GetComponent<CameraFollow>();
-        if (existingScript == null)
-        {
-            // Try to load the CameraFollow script
-            string scriptPath = "Assets/PCGLevelGenerator/Scripts/Core/CameraFollow.cs";
-            MonoScript scriptAsset = AssetDatabase.LoadAssetAtPath<MonoScript>(scriptPath);
-
-            if (scriptAsset != null)
-            {
-                // Add the script component
-                mainCamera.gameObject.AddComponent<CameraFollow>();
-                Debug.Log("Added CameraFollow script to Main Camera");
-            }
-            else
-            {
-                Debug.LogError("Could not find CameraFollow script at path: " + scriptPath);
-            }
-        }
-        else
-        {
-            Debug.Log("CameraFollow script already attached to Main Camera");
-        }
-    }
-
-    // Helper method to load all directional tiles from a specific folder
-    private void LoadDirectionalTilesWithOverwrite(HybridLevelGenerator generator, string subfolderName)
-    {
-        string basePath = $"Assets/PCGLevelGenerator/Tiles/Directional Tiles/{subfolderName}";
-
-        if (!AssetDatabase.IsValidFolder(basePath))
-        {
-            Debug.LogWarning($"Folder not found: {basePath}");
-            return;
-        }
-
-        // Map tile names to their respective properties
-        Dictionary<string, SerializedProperty> tileMapping = new Dictionary<string, SerializedProperty>();
-
-        // Basic Wall Directions
-        if (subfolderName == "Basic Wall Directions")
-        {
-            tileMapping.Add("Left", serializedObject.FindProperty("wallTileLeft").FindPropertyRelative("tile"));
-            tileMapping.Add("Right", serializedObject.FindProperty("wallTileRight").FindPropertyRelative("tile"));
-            tileMapping.Add("Top", serializedObject.FindProperty("wallTileTop").FindPropertyRelative("tile"));
-            tileMapping.Add("Bottom", serializedObject.FindProperty("wallTileBottom").FindPropertyRelative("tile"));
-        }
-        // Inner Corner Tiles
-        else if (subfolderName == "Inner Corner Tiles")
-        {
-            tileMapping.Add("InnerTopLeft", serializedObject.FindProperty("wallTileInnerTopLeft").FindPropertyRelative("tile"));
-            tileMapping.Add("InnerTopRight", serializedObject.FindProperty("wallTileInnerTopRight").FindPropertyRelative("tile"));
-            tileMapping.Add("InnerBottomLeft", serializedObject.FindProperty("wallTileInnerBottomLeft").FindPropertyRelative("tile"));
-            tileMapping.Add("InnerBottomRight", serializedObject.FindProperty("wallTileInnerBottomRight").FindPropertyRelative("tile"));
-        }
-        // Outer Corner Tiles
-        else if (subfolderName == "Outer Corner Tiles")
-        {
-            tileMapping.Add("OuterTopLeft", serializedObject.FindProperty("wallTileOuterTopLeft").FindPropertyRelative("tile"));
-            tileMapping.Add("OuterTopRight", serializedObject.FindProperty("wallTileOuterTopRight").FindPropertyRelative("tile"));
-            tileMapping.Add("OuterBottomLeft", serializedObject.FindProperty("wallTileOuterBottomLeft").FindPropertyRelative("tile"));
-            tileMapping.Add("OuterBottomRight", serializedObject.FindProperty("wallTileOuterBottomRight").FindPropertyRelative("tile"));
-        }
-
-        // Get all tile assets in the folder
-        string[] guids = AssetDatabase.FindAssets("t:TileBase", new[] { basePath });
-
-        foreach (string guid in guids)
-        {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-            TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
-
-            if (tile == null)
-                continue;
-
-            // Try to match the tile name with our mapping
-            foreach (var mapping in tileMapping)
-            {
-                if (tile.name.Contains(mapping.Key))
-                {
-                    // Always overwrite the value, regardless of whether it's already assigned
-                    mapping.Value.objectReferenceValue = tile;
-                    Debug.Log($"Assigned {mapping.Key} Tile: {tile.name} from {path}");
+                    prop.objectReferenceValue = tile;
+                    anyAssigned = true;
+                    Debug.Log($"Assigned {search.PropertyPath}: {tile.name}");
                     break;
                 }
             }
         }
 
-        // Apply the changes
-        serializedObject.ApplyModifiedProperties();
+        return anyAssigned;
     }
 
-    // --- Utility ---
-    private void MarkSceneDirty(HybridLevelGenerator generator)
+    private bool ProcessDirectionalTilesFolder(string directionalFolder)
     {
-        if (!Application.isPlaying && generator != null && generator.gameObject != null)
+        Debug.Log($"Checking directional tiles folder: {directionalFolder}");
+        bool anyAssigned = false;
+
+        // First, check for structured subfolders (most organized setup)
+        string[] subfolders = AssetDatabase.GetSubFolders(directionalFolder);
+
+        // Process basic directions
+        if (TryAssignTilesFromFolder(directionalFolder, new Dictionary<string, SerializedProperty>
+    {
+        {"bottom", wallTileBottomProp.FindPropertyRelative("tile")},
+        {"top", wallTileTopProp.FindPropertyRelative("tile")},
+        {"left", wallTileLeftProp.FindPropertyRelative("tile")},
+        {"right", wallTileRightProp.FindPropertyRelative("tile")}
+    }))
         {
-            try
+            anyAssigned = true;
+        }
+
+        // Process inner corners
+        if (TryAssignTilesFromFolder(directionalFolder, new Dictionary<string, SerializedProperty>
+    {
+        {"innertopleft", wallTileInnerTopLeftProp.FindPropertyRelative("tile")},
+        {"innertopright", wallTileInnerTopRightProp.FindPropertyRelative("tile")},
+        {"innerbottomleft", wallTileInnerBottomLeftProp.FindPropertyRelative("tile")},
+        {"innerbottomright", wallTileInnerBottomRightProp.FindPropertyRelative("tile")}
+    }))
+        {
+            anyAssigned = true;
+        }
+
+        // Process outer corners
+        if (TryAssignTilesFromFolder(directionalFolder, new Dictionary<string, SerializedProperty>
+    {
+        {"outertopleft", wallTileOuterTopLeftProp.FindPropertyRelative("tile")},
+        {"outertopright", wallTileOuterTopRightProp.FindPropertyRelative("tile")},
+        {"outerbottomleft", wallTileOuterBottomLeftProp.FindPropertyRelative("tile")},
+        {"outerbottomright", wallTileOuterBottomRightProp.FindPropertyRelative("tile")}
+    }))
+        {
+            anyAssigned = true;
+        }
+
+        if (anyAssigned)
+        {
+            // Set rotation values to default
+            wallTileBottomProp.FindPropertyRelative("rotation").intValue = 0;
+            wallTileTopProp.FindPropertyRelative("rotation").intValue = 0;
+            wallTileLeftProp.FindPropertyRelative("rotation").intValue = 0;
+            wallTileRightProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileInnerTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
+            wallTileInnerTopRightProp.FindPropertyRelative("rotation").intValue = 0;
+            wallTileInnerBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
+            wallTileInnerBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileOuterTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
+            wallTileOuterTopRightProp.FindPropertyRelative("rotation").intValue = 0;
+            wallTileOuterBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
+            wallTileOuterBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
+        }
+
+        return anyAssigned;
+    }
+    private void InitializeAssets()
+
+    {
+
+        // Get the target reference
+
+        HybridLevelGenerator generator = (HybridLevelGenerator)target;
+
+        Undo.RecordObject(generator, "Initialize Assets");
+
+        bool anyAssetsAssigned = false;
+
+
+
+        Debug.Log("=== PCG LEVEL GENERATOR: INITIALIZING ASSETS ===");
+
+
+
+        // 1. Find and assign Tilemaps in the scene
+
+        if (generator.groundTilemap == null || generator.wallTilemap == null)
+
+        {
+
+            Tilemap[] tilemaps = FindObjectsByType<Tilemap>(FindObjectsSortMode.None);
+
+            foreach (Tilemap tilemap in tilemaps)
+
             {
-                if (generator.gameObject.scene != null &&
-                    generator.gameObject.scene.IsValid() &&
-                    generator.gameObject.scene.isLoaded)
+
+                if (generator.groundTilemap == null &&
+
+                    (tilemap.name.ToLower().Contains("ground") || tilemap.name.ToLower().Contains("floor")))
+
                 {
-                    UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(generator.gameObject.scene);
+
+                    generator.groundTilemap = tilemap;
+
+                    anyAssetsAssigned = true;
+
+                    Debug.Log("Assigned Ground Tilemap: " + tilemap.name);
+
+                }
+
+                else if (generator.wallTilemap == null && tilemap.name.ToLower().Contains("wall"))
+
+                {
+
+                    generator.wallTilemap = tilemap;
+
+                    anyAssetsAssigned = true;
+
+                    Debug.Log("Assigned Wall Tilemap: " + tilemap.name);
+
+                }
+
+            }
+
+        }
+
+
+
+        // 2. Find and assign basic floor and wall tiles
+
+        if (generator.floorTile == null || generator.wallTile == null)
+
+        {
+
+            // Look for tiles in the project
+
+            string[] tileGuids = AssetDatabase.FindAssets("t:TileBase");
+
+
+
+            foreach (string guid in tileGuids)
+
+            {
+
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+
+                string fileName = Path.GetFileNameWithoutExtension(path).ToLower();
+
+                string directory = Path.GetDirectoryName(path).Replace('\\', '/');
+
+
+
+                // Skip directional tiles for main wall tile assignment
+
+                bool isDirectionalTile =
+
+                    directory.Contains("Directional Tiles") ||
+
+                    directory.Contains("Basic Wall Directions") ||
+
+                    directory.Contains("Inner Corner Tiles") ||
+
+                    directory.Contains("Outer Corner Tiles") ||
+
+                    fileName.Contains("left") || fileName.Contains("right") ||
+
+                    fileName.Contains("top") || fileName.Contains("bottom") ||
+
+                    fileName.Contains("inner") || fileName.Contains("outer") ||
+
+                    fileName.Contains("corner");
+
+
+
+                // Assign floor tile
+
+                if (generator.floorTile == null && fileName.Contains("floor"))
+
+                {
+
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+
+                    if (tile != null)
+
+                    {
+
+                        generator.floorTile = tile;
+
+                        anyAssetsAssigned = true;
+
+                        Debug.Log($"Assigned Floor Tile: {tile.name} from {path}");
+
+                    }
+
+                }
+
+
+
+                // Assign non-directional wall tile
+
+                if (generator.wallTile == null && fileName.Contains("wall") && !isDirectionalTile)
+
+                {
+
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+
+                    if (tile != null)
+
+                    {
+
+                        generator.wallTile = tile;
+
+                        anyAssetsAssigned = true;
+
+                        Debug.Log($"Assigned Wall Tile: {tile.name} from {path}");
+
+                    }
+
+                }
+
+            }
+
+        }
+
+
+
+        // 3. Find and assign directional wall tiles
+
+        bool directionalTilesAssigned = false;
+
+
+
+        // Enable directional walls if we're assigning any
+
+        generator.useDirectionalWalls = true;
+
+
+
+        // Map for directional tile properties - matching sprite numbers in reference script
+
+        Dictionary<string, SerializedProperty> directionalTileProperties = new Dictionary<string, SerializedProperty>();
+
+
+
+        // Basic Wall Directions (Sprite #1-4)
+
+        directionalTileProperties.Add("bottom", wallTileBottomProp.FindPropertyRelative("tile")); // #1
+
+        directionalTileProperties.Add("top", wallTileTopProp.FindPropertyRelative("tile"));       // #2
+
+        directionalTileProperties.Add("right", wallTileRightProp.FindPropertyRelative("tile"));   // #3
+
+        directionalTileProperties.Add("left", wallTileLeftProp.FindPropertyRelative("tile"));     // #4
+
+
+
+        // Inner Corner Tiles (Sprite #5-8)
+
+        directionalTileProperties.Add("innertopleft", wallTileInnerTopLeftProp.FindPropertyRelative("tile"));        // #5
+
+        directionalTileProperties.Add("innertopright", wallTileInnerTopRightProp.FindPropertyRelative("tile"));      // #6
+
+        directionalTileProperties.Add("innerbottomleft", wallTileInnerBottomLeftProp.FindPropertyRelative("tile"));  // #7
+
+        directionalTileProperties.Add("innerbottomright", wallTileInnerBottomRightProp.FindPropertyRelative("tile"));// #8
+
+
+
+        // Outer Corner Tiles (Sprite #9-12)
+
+        directionalTileProperties.Add("outertopleft", wallTileOuterTopLeftProp.FindPropertyRelative("tile"));        // #9
+
+        directionalTileProperties.Add("outertopright", wallTileOuterTopRightProp.FindPropertyRelative("tile"));      // #10
+
+        directionalTileProperties.Add("outerbottomleft", wallTileOuterBottomLeftProp.FindPropertyRelative("tile"));  // #11
+
+        directionalTileProperties.Add("outerbottomright", wallTileOuterBottomRightProp.FindPropertyRelative("tile"));// #12
+
+
+
+        // Search for all tile assets
+
+        string[] allTileGuids = AssetDatabase.FindAssets("t:TileBase");
+
+        foreach (string guid in allTileGuids)
+
+        {
+
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+
+            string fileName = Path.GetFileNameWithoutExtension(path).ToLower();
+
+
+
+            // Only process wall-related tiles
+
+            if (!fileName.Contains("wall"))
+
+                continue;
+
+
+
+            // Check if this tile matches any of our directional patterns
+
+            foreach (var kvp in directionalTileProperties)
+
+            {
+
+                string pattern = kvp.Key.ToLower();
+
+                SerializedProperty property = kvp.Value;
+
+
+
+                // Try various match patterns
+
+                bool isMatch = false;
+
+
+
+                // Check combined terms (e.g., "innertopleft")
+
+                if (fileName.Contains(pattern))
+
+                    isMatch = true;
+
+
+
+                // Check separated terms (e.g., "inner top left")
+
+                if (pattern.Length > 8) // More complex patterns like inner/outer corners
+
+                {
+
+                    // For inner and outer corners, split the pattern into parts
+
+                    if (pattern.StartsWith("inner") || pattern.StartsWith("outer"))
+
+                    {
+
+                        string prefix = pattern.StartsWith("inner") ? "inner" : "outer";
+
+                        string remainder = pattern.Substring(prefix.Length);
+
+
+
+                        if (fileName.Contains(prefix) &&
+
+                            (fileName.Contains(remainder) ||
+
+                             (remainder.Contains("top") && fileName.Contains("top") &&
+
+                              (remainder.Contains("left") && fileName.Contains("left") ||
+
+                               remainder.Contains("right") && fileName.Contains("right"))) ||
+
+                             (remainder.Contains("bottom") && fileName.Contains("bottom") &&
+
+                              (remainder.Contains("left") && fileName.Contains("left") ||
+
+                               remainder.Contains("right") && fileName.Contains("right")))))
+
+                        {
+
+                            isMatch = true;
+
+                        }
+
+                    }
+
+                }
+
+
+
+                if (isMatch)
+
+                {
+
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+
+                    if (tile != null)
+
+                    {
+
+                        property.objectReferenceValue = tile;
+
+                        directionalTilesAssigned = true;
+
+                        anyAssetsAssigned = true;
+
+                        Debug.Log($"Assigned Directional Tile {pattern}: {tile.name} from {path}");
+
+                    }
+
+                }
+
+            }
+
+        }
+
+
+
+        // If no directional tiles were found by name, try looking in standard folder structure
+
+        if (!directionalTilesAssigned)
+
+        {
+
+            // Try with traditional folder approach
+
+            string[] possibleRootFolders = new string[]
+
+            {
+            "Assets/PCGLevelGenerator/Tiles/Directional Tiles",
+            "Assets/Tiles/Directional Tiles",
+            "Assets/PCGLevelGenerator/Tiles",
+            "Assets/Tiles"
+
+            };
+
+
+
+            string directionalTilesFolder = null;
+
+            foreach (string folder in possibleRootFolders)
+
+            {
+
+                if (AssetDatabase.IsValidFolder(folder))
+
+                {
+
+                    directionalTilesFolder = folder;
+
+                    break;
+
+                }
+
+            }
+
+
+
+            if (directionalTilesFolder != null)
+
+            {
+
+                string[] subfolders = AssetDatabase.GetSubFolders(directionalTilesFolder);
+
+
+
+                // Try to match specific subfolders for different tile types
+
+                foreach (string subfolder in subfolders)
+
+                {
+
+                    string folderName = Path.GetFileName(subfolder).ToLower();
+
+
+
+                    if (folderName.Contains("basic") || folderName.Contains("direction"))
+
+                    {
+
+                        directionalTilesAssigned |= TryAssignTilesFromFolder(subfolder, new Dictionary<string, SerializedProperty>()
+                    {
+                        {"bottom", wallTileBottomProp.FindPropertyRelative("tile")},
+                        {"top", wallTileTopProp.FindPropertyRelative("tile")},
+                        {"right", wallTileRightProp.FindPropertyRelative("tile")},
+                        {"left", wallTileLeftProp.FindPropertyRelative("tile")}
+                    });
+
+                    }
+
+                    else if (folderName.Contains("inner"))
+
+                    {
+
+                        directionalTilesAssigned |= TryAssignTilesFromFolder(subfolder, new Dictionary<string, SerializedProperty>()
+                    {
+                        {"topleft", wallTileInnerTopLeftProp.FindPropertyRelative("tile")},
+                        {"topright", wallTileInnerTopRightProp.FindPropertyRelative("tile")},
+                        {"bottomleft", wallTileInnerBottomLeftProp.FindPropertyRelative("tile")},
+                        {"bottomright", wallTileInnerBottomRightProp.FindPropertyRelative("tile")}
+                    });
+
+                    }
+
+                    else if (folderName.Contains("outer"))
+
+                    {
+
+                        directionalTilesAssigned |= TryAssignTilesFromFolder(subfolder, new Dictionary<string, SerializedProperty>()
+                    {
+                        {"topleft", wallTileOuterTopLeftProp.FindPropertyRelative("tile")},
+                        {"topright", wallTileOuterTopRightProp.FindPropertyRelative("tile")},
+                        {"bottomleft", wallTileOuterBottomLeftProp.FindPropertyRelative("tile")},
+                        {"bottomright", wallTileOuterBottomRightProp.FindPropertyRelative("tile")}
+                    });
+
+                    }
+
+                }
+
+            }
+
+        }
+
+
+
+        // Set rotation values for directional tiles (default to zero)
+
+        if (directionalTilesAssigned)
+
+        {
+
+            // Basic directions
+
+            wallTileBottomProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileTopProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileRightProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileLeftProp.FindPropertyRelative("rotation").intValue = 0;
+
+
+
+            // Inner corners
+
+            wallTileInnerTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileInnerTopRightProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileInnerBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileInnerBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
+
+
+
+            // Outer corners
+
+            wallTileOuterTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileOuterTopRightProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileOuterBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
+
+            wallTileOuterBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
+
+
+
+            anyAssetsAssigned = true;
+
+        }
+
+
+
+        // Set useDirectionalWalls based on if we found any
+
+        generator.useDirectionalWalls = directionalTilesAssigned;
+
+
+
+        // 4. Find and assign entity prefabs
+
+        bool entityAssetsAssigned = AutoAssignEntityPrefabs();
+
+        anyAssetsAssigned |= entityAssetsAssigned;
+
+
+
+        // Update the serialized object to reflect changes
+
+        serializedObject.Update();
+
+
+
+        // Save changes
+
+        if (anyAssetsAssigned)
+
+        {
+
+            // Apply modified properties
+
+            serializedObject.ApplyModifiedProperties();
+
+
+
+            EditorUtility.SetDirty(generator);
+
+            MarkSceneDirty(generator);
+
+            ShowFeedback("Assets initialized successfully!", MessageType.Info);
+
+        }
+
+        else
+
+        {
+
+            ShowFeedback("No assets were found to assign. Check project structure.", MessageType.Warning);
+
+        }
+
+    }
+
+
+
+    private bool TryAssignTilesFromFolder(string folderPath, Dictionary<string, SerializedProperty> propertyMap)
+{
+    bool anyAssigned = false;
+    string[] tileGuids = AssetDatabase.FindAssets("t:TileBase", new[] { folderPath });
+
+    Debug.Log($"Searching for tiles in folder: {folderPath}. Found {tileGuids.Length} tile assets.");
+
+    foreach (string guid in tileGuids)
+    {
+        string path = AssetDatabase.GUIDToAssetPath(guid);
+        string fileName = Path.GetFileNameWithoutExtension(path).ToLower();
+
+        foreach (var mapping in propertyMap)
+        {
+            string key = mapping.Key.ToLower();
+            if (fileName.Contains(key))
+            {
+                TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+                if (tile != null)
+                {
+                    mapping.Value.objectReferenceValue = tile;
+                    anyAssigned = true;
+                    Debug.Log($"Assigned tile from folder: {tile.name} to {mapping.Key} from {path}");
                 }
             }
-            catch (Exception e)
-            {
-                Debug.LogWarning($"Could not mark scene dirty: {e.Message}");
-            }
         }
     }
 
-    private string GetModeHelpText(GenerationMode mode)
+    // If we didn't find matches by name in this folder, search recursively in subfolders
+    if (!anyAssigned)
     {
-        switch (mode)
+        string[] subfolders = AssetDatabase.GetSubFolders(folderPath);
+        foreach (string subfolder in subfolders)
         {
-            case GenerationMode.FullyProcedural:
-                return "BSP partitions + Random Rect rooms + MST corridors.\nGood for classic roguelike dungeons.";
-            case GenerationMode.HybridProcedural:
-                return "BSP partitions + mix of Rects, L-Shapes, and Room Templates + MST corridors.\nOffers more variety.";
-            case GenerationMode.UserDefinedLayout:
-                return "Generates layout based on RoomNode components placed in the scene.\nRequires setup using the 'Open Visual Level Designer' window.";
-            default:
-                return "Unknown Generation Mode Selected.";
+            anyAssigned |= TryAssignTilesFromFolder(subfolder, propertyMap);
+            if (anyAssigned) break;
         }
     }
+
+    return anyAssigned;
+}
+
+
+
+    private TileBase FindTileAsset(string nameContains, string[] excludeContains = null)
+    {
+        // Project-wide search for matching tiles
+        string[] guids = AssetDatabase.FindAssets("t:TileBase");
+
+        Debug.Log($"Searching for tile with name containing: {nameContains}. Found {guids.Length} total tiles in project.");
+
+        foreach (string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            string fileName = Path.GetFileNameWithoutExtension(path).ToLower();
+
+            // Check if file name contains the search term
+            if (fileName.Contains(nameContains.ToLower()))
+            {
+                // Check exclusions if provided
+                bool excluded = false;
+                if (excludeContains != null)
+                {
+                    foreach (string exclude in excludeContains)
+                    {
+                        if (fileName.Contains(exclude.ToLower()))
+                        {
+                            excluded = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!excluded)
+                {
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+                    if (tile != null)
+                    {
+                        Debug.Log($"Found matching tile: {tile.name} at {path}");
+                        return tile;
+                    }
+                }
+            }
+        }
+
+        Debug.LogWarning($"No matching tile found for: {nameContains}");
+        return null;
+    }
+
+    private bool TryAssignDirectionalTile(HybridLevelGenerator generator, string propertyName, string searchTerm)
+    {
+        // Find tile
+        string directionalTilePath = "Assets/PCGLevelGenerator/Tiles/Directional Tiles";
+        TileBase tile = FindTileAsset(searchTerm);
+
+        if (tile != null)
+        {
+            // Determine the correct property and set it
+            var prop = serializedObject.FindProperty(propertyName);
+            if (prop != null)
+            {
+                var tileProp = prop.FindPropertyRelative("tile");
+                if (tileProp != null)
+                {
+                    tileProp.objectReferenceValue = tile;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+
+
+    private bool AutoAssignEntityPrefabs()
+
+    {
+
+        HybridLevelGenerator generator = (HybridLevelGenerator)target;
+
+        bool anyAssigned = false;
+
+
+
+        // Possible entity prefab folders to check
+
+        string[] possiblePrefabFolders = new string[]
+
+        {
+        "Assets/PCGLevelGenerator/Prefabs",
+        "Assets/Prefabs",
+
+        "Assets/PCGLevelGenerator/Resources",
+        "Assets/Resources"
+
+        };
+
+
+
+        // Find the first valid prefab folder
+
+        string prefabFolder = null;
+
+        foreach (string folder in possiblePrefabFolders)
+
+        {
+
+            if (AssetDatabase.IsValidFolder(folder))
+
+            {
+
+                prefabFolder = folder;
+
+                break;
+
+            }
+
+        }
+
+
+
+        if (prefabFolder == null)
+
+        {
+
+            Debug.LogWarning("No prefab folder found in standard locations.");
+
+            return false;
+
+        }
+
+
+
+        // 1. Try to assign Player prefab
+
+        if (generator.playerPrefab == null)
+
+        {
+
+            GameObject playerPrefab = FindPrefabByKeywords(prefabFolder, new[] { "player", "character", "hero" });
+
+            if (playerPrefab != null)
+
+            {
+
+                generator.playerPrefab = playerPrefab;
+
+                anyAssigned = true;
+
+                Debug.Log($"Assigned Player Prefab: {playerPrefab.name}");
+
+            }
+
+        }
+
+
+
+        // 2. Try to assign Enemy prefab
+
+        if (generator.enemyPrefab == null)
+
+        {
+
+            GameObject enemyPrefab = FindPrefabByKeywords(prefabFolder, new[] { "enemy", "monster", "foe", "opponent" });
+
+            if (enemyPrefab != null)
+
+            {
+
+                generator.enemyPrefab = enemyPrefab;
+
+                anyAssigned = true;
+
+                Debug.Log($"Assigned Enemy Prefab: {enemyPrefab.name}");
+
+            }
+
+        }
+
+
+
+        // 3. Try to assign Decoration prefab
+
+        if (generator.decorationPrefab == null)
+
+        {
+
+            GameObject decorPrefab = FindPrefabByKeywords(prefabFolder, new[] { "decoration", "prop", "furniture", "decor", "item" });
+
+            if (decorPrefab != null)
+
+            {
+
+                generator.decorationPrefab = decorPrefab;
+
+                anyAssigned = true;
+
+                Debug.Log($"Assigned Decoration Prefab: {decorPrefab.name}");
+
+            }
+
+        }
+
+
+
+        return anyAssigned;
+
+    }
+
+
+
+
+
+    private GameObject FindPrefabByKeywords(string folder, string[] keywords)
+
+    {
+
+        string[] prefabGuids = AssetDatabase.FindAssets("t:GameObject", new[] { folder });
+
+
+
+        foreach (string guid in prefabGuids)
+
+        {
+
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+
+            string fileName = Path.GetFileNameWithoutExtension(path).ToLower();
+
+
+
+            foreach (string keyword in keywords)
+
+            {
+
+                if (fileName.Contains(keyword.ToLower()))
+
+                {
+
+                    GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+
+                    if (prefab != null)
+
+                    {
+
+                        return prefab;
+
+                    }
+
+                }
+
+            }
+
+        }
+
+
+
+        // Try in subfolders if not found
+
+        string[] subFolders = AssetDatabase.GetSubFolders(folder);
+
+        foreach (string subFolder in subFolders)
+
+        {
+
+            GameObject result = FindPrefabByKeywords(subFolder, keywords);
+
+            if (result != null)
+
+            {
+
+                return result;
+
+            }
+
+        }
+
+
+
+        return null;
+
+    }
+
+
+
+    private GameObject FindPrefabAsset(string basePath, string nameContains)
+    {
+        return FindPrefabAsset(basePath, new[] { nameContains });
+    }
+
+    private GameObject FindPrefabAsset(string basePath, string[] nameContains)
+    {
+        // Search the project for matching prefabs
+        string[] guids = AssetDatabase.FindAssets("t:GameObject", new[] { basePath });
+
+        foreach (string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            string fileName = Path.GetFileNameWithoutExtension(path).ToLower();
+
+            // Check if file name contains any of the search terms
+            foreach (string term in nameContains)
+            {
+                if (fileName.Contains(term.ToLower()))
+                {
+                    GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                    if (prefab != null)
+                    {
+                        return prefab;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    #endregion
 }
