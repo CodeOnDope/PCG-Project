@@ -2519,611 +2519,492 @@ public class HybridLevelGeneratorEditor : Editor
         return anyAssigned;
     }
 
-    private bool ProcessDirectionalTilesFolder(string directionalFolder)
+    private bool ProcessDirectionalTilesFolder(string baseFolderPath)
     {
-        Debug.Log($"Checking directional tiles folder: {directionalFolder}");
         bool anyAssigned = false;
 
-        // First, check for structured subfolders (most organized setup)
-        string[] subfolders = AssetDatabase.GetSubFolders(directionalFolder);
+        // Look for specific subfolders
+        string basicWallDirPath = Path.Combine(baseFolderPath, "Basic Wall Directions").Replace('\\', '/');
+        string innerCornerPath = Path.Combine(baseFolderPath, "Inner Corner Tiles").Replace('\\', '/');
+        string outerCornerPath = Path.Combine(baseFolderPath, "Outer Corner Tiles").Replace('\\', '/');
 
-        // Process basic directions
-        if (TryAssignTilesFromFolder(directionalFolder, new Dictionary<string, SerializedProperty>
-    {
-        {"bottom", wallTileBottomProp.FindPropertyRelative("tile")},
-        {"top", wallTileTopProp.FindPropertyRelative("tile")},
-        {"left", wallTileLeftProp.FindPropertyRelative("tile")},
-        {"right", wallTileRightProp.FindPropertyRelative("tile")}
-    }))
+        // Check if these folders exist
+        bool basicExists = AssetDatabase.IsValidFolder(basicWallDirPath);
+        bool innerExists = AssetDatabase.IsValidFolder(innerCornerPath);
+        bool outerExists = AssetDatabase.IsValidFolder(outerCornerPath);
+
+        Debug.Log($"Basic Wall Directions folder exists: {basicExists} - {basicWallDirPath}");
+        Debug.Log($"Inner Corner Tiles folder exists: {innerExists} - {innerCornerPath}");
+        Debug.Log($"Outer Corner Tiles folder exists: {outerExists} - {outerCornerPath}");
+
+        // Process Basic Wall Directions
+        if (basicExists)
         {
-            anyAssigned = true;
+            anyAssigned |= TryAssignTilesFromFolder(basicWallDirPath, new Dictionary<string, SerializedProperty>
+        {
+            {"bottom", wallTileBottomProp.FindPropertyRelative("tile")},
+            {"top", wallTileTopProp.FindPropertyRelative("tile")},
+            {"left", wallTileLeftProp.FindPropertyRelative("tile")},
+            {"right", wallTileRightProp.FindPropertyRelative("tile")}
+        });
         }
 
-        // Process inner corners
-        if (TryAssignTilesFromFolder(directionalFolder, new Dictionary<string, SerializedProperty>
-    {
-        {"innertopleft", wallTileInnerTopLeftProp.FindPropertyRelative("tile")},
-        {"innertopright", wallTileInnerTopRightProp.FindPropertyRelative("tile")},
-        {"innerbottomleft", wallTileInnerBottomLeftProp.FindPropertyRelative("tile")},
-        {"innerbottomright", wallTileInnerBottomRightProp.FindPropertyRelative("tile")}
-    }))
+        // Process Inner Corner Tiles
+        if (innerExists)
         {
-            anyAssigned = true;
+            anyAssigned |= TryAssignTilesFromFolder(innerCornerPath, new Dictionary<string, SerializedProperty>
+        {
+            {"topleft", wallTileInnerTopLeftProp.FindPropertyRelative("tile")},
+            {"topright", wallTileInnerTopRightProp.FindPropertyRelative("tile")},
+            {"bottomleft", wallTileInnerBottomLeftProp.FindPropertyRelative("tile")},
+            {"bottomright", wallTileInnerBottomRightProp.FindPropertyRelative("tile")}
+        });
         }
 
-        // Process outer corners
-        if (TryAssignTilesFromFolder(directionalFolder, new Dictionary<string, SerializedProperty>
-    {
-        {"outertopleft", wallTileOuterTopLeftProp.FindPropertyRelative("tile")},
-        {"outertopright", wallTileOuterTopRightProp.FindPropertyRelative("tile")},
-        {"outerbottomleft", wallTileOuterBottomLeftProp.FindPropertyRelative("tile")},
-        {"outerbottomright", wallTileOuterBottomRightProp.FindPropertyRelative("tile")}
-    }))
+        // Process Outer Corner Tiles  
+        if (outerExists)
         {
-            anyAssigned = true;
-        }
-
-        if (anyAssigned)
+            anyAssigned |= TryAssignTilesFromFolder(outerCornerPath, new Dictionary<string, SerializedProperty>
         {
-            // Set rotation values to default
-            wallTileBottomProp.FindPropertyRelative("rotation").intValue = 0;
-            wallTileTopProp.FindPropertyRelative("rotation").intValue = 0;
-            wallTileLeftProp.FindPropertyRelative("rotation").intValue = 0;
-            wallTileRightProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileInnerTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
-            wallTileInnerTopRightProp.FindPropertyRelative("rotation").intValue = 0;
-            wallTileInnerBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
-            wallTileInnerBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileOuterTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
-            wallTileOuterTopRightProp.FindPropertyRelative("rotation").intValue = 0;
-            wallTileOuterBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
-            wallTileOuterBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
+            {"topleft", wallTileOuterTopLeftProp.FindPropertyRelative("tile")},
+            {"topright", wallTileOuterTopRightProp.FindPropertyRelative("tile")},
+            {"bottomleft", wallTileOuterBottomLeftProp.FindPropertyRelative("tile")},
+            {"bottomright", wallTileOuterBottomRightProp.FindPropertyRelative("tile")}
+        });
         }
 
         return anyAssigned;
     }
     private void InitializeAssets()
-
     {
-
         // Get the target reference
-
         HybridLevelGenerator generator = (HybridLevelGenerator)target;
-
         Undo.RecordObject(generator, "Initialize Assets");
-
         bool anyAssetsAssigned = false;
-
-
 
         Debug.Log("=== PCG LEVEL GENERATOR: INITIALIZING ASSETS ===");
 
-
-
         // 1. Find and assign Tilemaps in the scene
-
         if (generator.groundTilemap == null || generator.wallTilemap == null)
-
         {
-
             Tilemap[] tilemaps = FindObjectsByType<Tilemap>(FindObjectsSortMode.None);
-
             foreach (Tilemap tilemap in tilemaps)
-
             {
-
                 if (generator.groundTilemap == null &&
-
                     (tilemap.name.ToLower().Contains("ground") || tilemap.name.ToLower().Contains("floor")))
-
                 {
-
                     generator.groundTilemap = tilemap;
-
                     anyAssetsAssigned = true;
-
                     Debug.Log("Assigned Ground Tilemap: " + tilemap.name);
-
                 }
-
                 else if (generator.wallTilemap == null && tilemap.name.ToLower().Contains("wall"))
-
                 {
-
                     generator.wallTilemap = tilemap;
-
                     anyAssetsAssigned = true;
-
                     Debug.Log("Assigned Wall Tilemap: " + tilemap.name);
-
                 }
-
             }
-
         }
-
-
 
         // 2. Find and assign basic floor and wall tiles
-
         if (generator.floorTile == null || generator.wallTile == null)
-
         {
-
             // Look for tiles in the project
-
             string[] tileGuids = AssetDatabase.FindAssets("t:TileBase");
 
-
-
             foreach (string guid in tileGuids)
-
             {
-
                 string path = AssetDatabase.GUIDToAssetPath(guid);
-
                 string fileName = Path.GetFileNameWithoutExtension(path).ToLower();
-
                 string directory = Path.GetDirectoryName(path).Replace('\\', '/');
 
-
-
                 // Skip directional tiles for main wall tile assignment
-
                 bool isDirectionalTile =
-
                     directory.Contains("Directional Tiles") ||
-
                     directory.Contains("Basic Wall Directions") ||
-
                     directory.Contains("Inner Corner Tiles") ||
-
                     directory.Contains("Outer Corner Tiles") ||
-
                     fileName.Contains("left") || fileName.Contains("right") ||
-
                     fileName.Contains("top") || fileName.Contains("bottom") ||
-
                     fileName.Contains("inner") || fileName.Contains("outer") ||
-
                     fileName.Contains("corner");
 
-
-
                 // Assign floor tile
-
                 if (generator.floorTile == null && fileName.Contains("floor"))
-
                 {
-
                     TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
-
                     if (tile != null)
-
                     {
-
                         generator.floorTile = tile;
-
                         anyAssetsAssigned = true;
-
                         Debug.Log($"Assigned Floor Tile: {tile.name} from {path}");
-
                     }
-
                 }
-
-
 
                 // Assign non-directional wall tile
-
                 if (generator.wallTile == null && fileName.Contains("wall") && !isDirectionalTile)
-
                 {
-
                     TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
-
                     if (tile != null)
-
                     {
-
                         generator.wallTile = tile;
-
                         anyAssetsAssigned = true;
-
                         Debug.Log($"Assigned Wall Tile: {tile.name} from {path}");
-
                     }
-
                 }
-
             }
-
         }
-
-
 
         // 3. Find and assign directional wall tiles
-
         bool directionalTilesAssigned = false;
 
-
-
         // Enable directional walls if we're assigning any
-
         generator.useDirectionalWalls = true;
 
+        // Try the direct path approach with detailed logging
+        string baseFolderPath = "Assets/PCGLevelGenerator/Tiles/Directional Tiles";
+        Debug.Log($"Checking directional tiles base path: {baseFolderPath}, exists: {AssetDatabase.IsValidFolder(baseFolderPath)}");
 
+        string basicWallDirPath = baseFolderPath + "/Basic Wall Directions";
+        string innerCornerPath = baseFolderPath + "/Inner Corner Tiles";
+        string outerCornerPath = baseFolderPath + "/Outer Corner Tiles";
 
-        // Map for directional tile properties - matching sprite numbers in reference script
+        Debug.Log($"Checking Basic Wall Directions: {basicWallDirPath}, exists: {AssetDatabase.IsValidFolder(basicWallDirPath)}");
+        Debug.Log($"Checking Inner Corner Tiles: {innerCornerPath}, exists: {AssetDatabase.IsValidFolder(innerCornerPath)}");
+        Debug.Log($"Checking Outer Corner Tiles: {outerCornerPath}, exists: {AssetDatabase.IsValidFolder(outerCornerPath)}");
 
-        Dictionary<string, SerializedProperty> directionalTileProperties = new Dictionary<string, SerializedProperty>();
-
-
-
-        // Basic Wall Directions (Sprite #1-4)
-
-        directionalTileProperties.Add("bottom", wallTileBottomProp.FindPropertyRelative("tile")); // #1
-
-        directionalTileProperties.Add("top", wallTileTopProp.FindPropertyRelative("tile"));       // #2
-
-        directionalTileProperties.Add("right", wallTileRightProp.FindPropertyRelative("tile"));   // #3
-
-        directionalTileProperties.Add("left", wallTileLeftProp.FindPropertyRelative("tile"));     // #4
-
-
-
-        // Inner Corner Tiles (Sprite #5-8)
-
-        directionalTileProperties.Add("innertopleft", wallTileInnerTopLeftProp.FindPropertyRelative("tile"));        // #5
-
-        directionalTileProperties.Add("innertopright", wallTileInnerTopRightProp.FindPropertyRelative("tile"));      // #6
-
-        directionalTileProperties.Add("innerbottomleft", wallTileInnerBottomLeftProp.FindPropertyRelative("tile"));  // #7
-
-        directionalTileProperties.Add("innerbottomright", wallTileInnerBottomRightProp.FindPropertyRelative("tile"));// #8
-
-
-
-        // Outer Corner Tiles (Sprite #9-12)
-
-        directionalTileProperties.Add("outertopleft", wallTileOuterTopLeftProp.FindPropertyRelative("tile"));        // #9
-
-        directionalTileProperties.Add("outertopright", wallTileOuterTopRightProp.FindPropertyRelative("tile"));      // #10
-
-        directionalTileProperties.Add("outerbottomleft", wallTileOuterBottomLeftProp.FindPropertyRelative("tile"));  // #11
-
-        directionalTileProperties.Add("outerbottomright", wallTileOuterBottomRightProp.FindPropertyRelative("tile"));// #12
-
-
-
-        // Search for all tile assets
-
-        string[] allTileGuids = AssetDatabase.FindAssets("t:TileBase");
-
-        foreach (string guid in allTileGuids)
-
+        // First try exact path matching
+        if (AssetDatabase.IsValidFolder(baseFolderPath))
         {
-
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-
-            string fileName = Path.GetFileNameWithoutExtension(path).ToLower();
-
-
-
-            // Only process wall-related tiles
-
-            if (!fileName.Contains("wall"))
-
-                continue;
-
-
-
-            // Check if this tile matches any of our directional patterns
-
-            foreach (var kvp in directionalTileProperties)
-
+            // Process Basic Wall Directions
+            if (AssetDatabase.IsValidFolder(basicWallDirPath))
             {
+                Debug.Log($"Found Basic Wall Directions folder: {basicWallDirPath}");
 
-                string pattern = kvp.Key.ToLower();
+                // List all tile assets in this folder
+                string[] basicWallTiles = AssetDatabase.FindAssets("t:TileBase", new[] { basicWallDirPath });
+                Debug.Log($"Found {basicWallTiles.Length} tile assets in Basic Wall Directions folder");
 
-                SerializedProperty property = kvp.Value;
-
-
-
-                // Try various match patterns
-
-                bool isMatch = false;
-
-
-
-                // Check combined terms (e.g., "innertopleft")
-
-                if (fileName.Contains(pattern))
-
-                    isMatch = true;
-
-
-
-                // Check separated terms (e.g., "inner top left")
-
-                if (pattern.Length > 8) // More complex patterns like inner/outer corners
-
+                foreach (string tileGuid in basicWallTiles)
                 {
+                    string tilePath = AssetDatabase.GUIDToAssetPath(tileGuid);
+                    string tileName = Path.GetFileNameWithoutExtension(tilePath).ToLower();
+                    Debug.Log($"Basic Wall Directions tile: {tileName} at {tilePath}");
 
-                    // For inner and outer corners, split the pattern into parts
-
-                    if (pattern.StartsWith("inner") || pattern.StartsWith("outer"))
-
-                    {
-
-                        string prefix = pattern.StartsWith("inner") ? "inner" : "outer";
-
-                        string remainder = pattern.Substring(prefix.Length);
-
-
-
-                        if (fileName.Contains(prefix) &&
-
-                            (fileName.Contains(remainder) ||
-
-                             (remainder.Contains("top") && fileName.Contains("top") &&
-
-                              (remainder.Contains("left") && fileName.Contains("left") ||
-
-                               remainder.Contains("right") && fileName.Contains("right"))) ||
-
-                             (remainder.Contains("bottom") && fileName.Contains("bottom") &&
-
-                              (remainder.Contains("left") && fileName.Contains("left") ||
-
-                               remainder.Contains("right") && fileName.Contains("right")))))
-
-                        {
-
-                            isMatch = true;
-
-                        }
-
-                    }
-
-                }
-
-
-
-                if (isMatch)
-
-                {
-
-                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(tilePath);
 
                     if (tile != null)
-
                     {
-
-                        property.objectReferenceValue = tile;
-
-                        directionalTilesAssigned = true;
-
-                        anyAssetsAssigned = true;
-
-                        Debug.Log($"Assigned Directional Tile {pattern}: {tile.name} from {path}");
-
+                        // Assign based on name
+                        if (tileName.Contains("bottom"))
+                        {
+                            wallTileBottomProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileBottomProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Bottom Wall: {tile.name}");
+                        }
+                        else if (tileName.Contains("top"))
+                        {
+                            wallTileTopProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileTopProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Top Wall: {tile.name}");
+                        }
+                        else if (tileName.Contains("left"))
+                        {
+                            wallTileLeftProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileLeftProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Left Wall: {tile.name}");
+                        }
+                        else if (tileName.Contains("right"))
+                        {
+                            wallTileRightProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileRightProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Right Wall: {tile.name}");
+                        }
                     }
-
                 }
-
             }
 
+            // Process Inner Corner Tiles
+            if (AssetDatabase.IsValidFolder(innerCornerPath))
+            {
+                Debug.Log($"Found Inner Corner Tiles folder: {innerCornerPath}");
+
+                string[] innerCornerTiles = AssetDatabase.FindAssets("t:TileBase", new[] { innerCornerPath });
+                Debug.Log($"Found {innerCornerTiles.Length} tile assets in Inner Corner Tiles folder");
+
+                foreach (string tileGuid in innerCornerTiles)
+                {
+                    string tilePath = AssetDatabase.GUIDToAssetPath(tileGuid);
+                    string tileName = Path.GetFileNameWithoutExtension(tilePath).ToLower();
+                    Debug.Log($"Inner Corner tile: {tileName} at {tilePath}");
+
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(tilePath);
+
+                    if (tile != null)
+                    {
+                        // Assign based on name
+                        if (tileName.Contains("topleft") || (tileName.Contains("top") && tileName.Contains("left")))
+                        {
+                            wallTileInnerTopLeftProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileInnerTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Inner Top Left: {tile.name}");
+                        }
+                        else if (tileName.Contains("topright") || (tileName.Contains("top") && tileName.Contains("right")))
+                        {
+                            wallTileInnerTopRightProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileInnerTopRightProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Inner Top Right: {tile.name}");
+                        }
+                        else if (tileName.Contains("bottomleft") || (tileName.Contains("bottom") && tileName.Contains("left")))
+                        {
+                            wallTileInnerBottomLeftProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileInnerBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Inner Bottom Left: {tile.name}");
+                        }
+                        else if (tileName.Contains("bottomright") || (tileName.Contains("bottom") && tileName.Contains("right")))
+                        {
+                            wallTileInnerBottomRightProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileInnerBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Inner Bottom Right: {tile.name}");
+                        }
+                    }
+                }
+            }
+
+            // Process Outer Corner Tiles
+            if (AssetDatabase.IsValidFolder(outerCornerPath))
+            {
+                Debug.Log($"Found Outer Corner Tiles folder: {outerCornerPath}");
+
+                string[] outerCornerTiles = AssetDatabase.FindAssets("t:TileBase", new[] { outerCornerPath });
+                Debug.Log($"Found {outerCornerTiles.Length} tile assets in Outer Corner Tiles folder");
+
+                foreach (string tileGuid in outerCornerTiles)
+                {
+                    string tilePath = AssetDatabase.GUIDToAssetPath(tileGuid);
+                    string tileName = Path.GetFileNameWithoutExtension(tilePath).ToLower();
+                    Debug.Log($"Outer Corner tile: {tileName} at {tilePath}");
+
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(tilePath);
+
+                    if (tile != null)
+                    {
+                        // Assign based on name
+                        if (tileName.Contains("topleft") || (tileName.Contains("top") && tileName.Contains("left")))
+                        {
+                            wallTileOuterTopLeftProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileOuterTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Outer Top Left: {tile.name}");
+                        }
+                        else if (tileName.Contains("topright") || (tileName.Contains("top") && tileName.Contains("right")))
+                        {
+                            wallTileOuterTopRightProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileOuterTopRightProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Outer Top Right: {tile.name}");
+                        }
+                        else if (tileName.Contains("bottomleft") || (tileName.Contains("bottom") && tileName.Contains("left")))
+                        {
+                            wallTileOuterBottomLeftProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileOuterBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Outer Bottom Left: {tile.name}");
+                        }
+                        else if (tileName.Contains("bottomright") || (tileName.Contains("bottom") && tileName.Contains("right")))
+                        {
+                            wallTileOuterBottomRightProp.FindPropertyRelative("tile").objectReferenceValue = tile;
+                            wallTileOuterBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
+                            directionalTilesAssigned = true;
+                            Debug.Log($"Assigned Outer Bottom Right: {tile.name}");
+                        }
+                    }
+                }
+            }
         }
 
-
-
-        // If no directional tiles were found by name, try looking in standard folder structure
-
+        // If specific folder structure wasn't found, fall back to other methods
         if (!directionalTilesAssigned)
-
         {
-
-            // Try with traditional folder approach
-
-            string[] possibleRootFolders = new string[]
-
-            {
-            "Assets/PCGLevelGenerator/Tiles/Directional Tiles",
-            "Assets/Tiles/Directional Tiles",
-            "Assets/PCGLevelGenerator/Tiles",
-            "Assets/Tiles"
-
-            };
-
-
-
-            string directionalTilesFolder = null;
-
-            foreach (string folder in possibleRootFolders)
-
-            {
-
-                if (AssetDatabase.IsValidFolder(folder))
-
-                {
-
-                    directionalTilesFolder = folder;
-
-                    break;
-
-                }
-
-            }
-
-
-
-            if (directionalTilesFolder != null)
-
-            {
-
-                string[] subfolders = AssetDatabase.GetSubFolders(directionalTilesFolder);
-
-
-
-                // Try to match specific subfolders for different tile types
-
-                foreach (string subfolder in subfolders)
-
-                {
-
-                    string folderName = Path.GetFileName(subfolder).ToLower();
-
-
-
-                    if (folderName.Contains("basic") || folderName.Contains("direction"))
-
-                    {
-
-                        directionalTilesAssigned |= TryAssignTilesFromFolder(subfolder, new Dictionary<string, SerializedProperty>()
-                    {
-                        {"bottom", wallTileBottomProp.FindPropertyRelative("tile")},
-                        {"top", wallTileTopProp.FindPropertyRelative("tile")},
-                        {"right", wallTileRightProp.FindPropertyRelative("tile")},
-                        {"left", wallTileLeftProp.FindPropertyRelative("tile")}
-                    });
-
-                    }
-
-                    else if (folderName.Contains("inner"))
-
-                    {
-
-                        directionalTilesAssigned |= TryAssignTilesFromFolder(subfolder, new Dictionary<string, SerializedProperty>()
-                    {
-                        {"topleft", wallTileInnerTopLeftProp.FindPropertyRelative("tile")},
-                        {"topright", wallTileInnerTopRightProp.FindPropertyRelative("tile")},
-                        {"bottomleft", wallTileInnerBottomLeftProp.FindPropertyRelative("tile")},
-                        {"bottomright", wallTileInnerBottomRightProp.FindPropertyRelative("tile")}
-                    });
-
-                    }
-
-                    else if (folderName.Contains("outer"))
-
-                    {
-
-                        directionalTilesAssigned |= TryAssignTilesFromFolder(subfolder, new Dictionary<string, SerializedProperty>()
-                    {
-                        {"topleft", wallTileOuterTopLeftProp.FindPropertyRelative("tile")},
-                        {"topright", wallTileOuterTopRightProp.FindPropertyRelative("tile")},
-                        {"bottomleft", wallTileOuterBottomLeftProp.FindPropertyRelative("tile")},
-                        {"bottomright", wallTileOuterBottomRightProp.FindPropertyRelative("tile")}
-                    });
-
-                    }
-
-                }
-
-            }
-
+            Debug.Log("Falling back to general tile name search...");
+            directionalTilesAssigned = TryAssignDirectionalWallTiles();
         }
-
-
-
-        // Set rotation values for directional tiles (default to zero)
-
-        if (directionalTilesAssigned)
-
-        {
-
-            // Basic directions
-
-            wallTileBottomProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileTopProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileRightProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileLeftProp.FindPropertyRelative("rotation").intValue = 0;
-
-
-
-            // Inner corners
-
-            wallTileInnerTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileInnerTopRightProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileInnerBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileInnerBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
-
-
-
-            // Outer corners
-
-            wallTileOuterTopLeftProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileOuterTopRightProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileOuterBottomLeftProp.FindPropertyRelative("rotation").intValue = 0;
-
-            wallTileOuterBottomRightProp.FindPropertyRelative("rotation").intValue = 0;
-
-
-
-            anyAssetsAssigned = true;
-
-        }
-
-
 
         // Set useDirectionalWalls based on if we found any
-
         generator.useDirectionalWalls = directionalTilesAssigned;
 
-
-
-        // 4. Find and assign entity prefabs
-
-        bool entityAssetsAssigned = AutoAssignEntityPrefabs();
-
-        anyAssetsAssigned |= entityAssetsAssigned;
-
-
-
-        // Update the serialized object to reflect changes
-
-        serializedObject.Update();
-
-
-
-        // Save changes
-
-        if (anyAssetsAssigned)
-
+        if (directionalTilesAssigned)
         {
-
-            // Apply modified properties
+            anyAssetsAssigned = true;
+            Debug.Log("Successfully assigned directional wall tiles!");
 
             serializedObject.ApplyModifiedProperties();
+            EditorUtility.SetDirty(target);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            // Force repaint of inspector window
+            Repaint();
 
 
+        }
+
+        // 4. Find and assign entity prefabs
+        bool entityAssetsAssigned = AutoAssignEntityPrefabs();
+        anyAssetsAssigned |= entityAssetsAssigned;
+
+        // Update the serialized object to reflect changes
+        serializedObject.Update();
+        if (anyAssetsAssigned)
+        {
+            // Apply modified properties
+            serializedObject.ApplyModifiedProperties();
 
             EditorUtility.SetDirty(generator);
-
             MarkSceneDirty(generator);
 
+            // Add these additional lines
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Repaint();
+
             ShowFeedback("Assets initialized successfully!", MessageType.Info);
-
         }
-
-        else
-
+        // Save changes
+        if (anyAssetsAssigned)
         {
+            // Apply modified properties
+            serializedObject.ApplyModifiedProperties();
 
+            EditorUtility.SetDirty(generator);
+            MarkSceneDirty(generator);
+            ShowFeedback("Assets initialized successfully!", MessageType.Info);
+        }
+        else
+        {
             ShowFeedback("No assets were found to assign. Check project structure.", MessageType.Warning);
+        }
+    }
 
+    // Add this new method to help with the specific folder structure
+    private bool FindAndAssignDirectionalTiles()
+    {
+        bool anyAssigned = false;
+
+        // Look for the specific folder structure
+        string[] possibleBasePaths = new string[]
+        {
+        "Assets/Tiles/Directional Tiles",
+        "Assets/PCGLevelGenerator/Tiles/Directional Tiles",
+        "Assets/Tiles",
+        "Assets/PCGLevelGenerator/Tiles"
+        };
+
+        string directionalTilesBasePath = null;
+        foreach (string path in possibleBasePaths)
+        {
+            if (AssetDatabase.IsValidFolder(path))
+            {
+                directionalTilesBasePath = path;
+                Debug.Log($"Found directional tiles base path: {directionalTilesBasePath}");
+                break;
+            }
         }
 
+        if (directionalTilesBasePath == null)
+        {
+            Debug.LogWarning("Could not find directional tiles folder. Please check your project structure.");
+            return false;
+        }
+
+        // Now look for specific subfolders
+        string basicDirPath = Path.Combine(directionalTilesBasePath, "Basic Wall Directions").Replace('\\', '/');
+        string innerCornerPath = Path.Combine(directionalTilesBasePath, "Inner Corner Tiles").Replace('\\', '/');
+        string outerCornerPath = Path.Combine(directionalTilesBasePath, "Outer Corner Tiles").Replace('\\', '/');
+
+        Debug.Log($"Looking for Basic Wall Directions at: {basicDirPath}");
+        Debug.Log($"Looking for Inner Corner Tiles at: {innerCornerPath}");
+        Debug.Log($"Looking for Outer Corner Tiles at: {outerCornerPath}");
+
+        // Process Basic Wall Directions
+        if (AssetDatabase.IsValidFolder(basicDirPath))
+        {
+            anyAssigned |= AssignTilesFromDirectionalFolder(basicDirPath, new Dictionary<string, SerializedProperty>
+        {
+            {"bottom", wallTileBottomProp.FindPropertyRelative("tile")},
+            {"top", wallTileTopProp.FindPropertyRelative("tile")},
+            {"left", wallTileLeftProp.FindPropertyRelative("tile")},
+            {"right", wallTileRightProp.FindPropertyRelative("tile")}
+        });
+        }
+
+        // Process Inner Corner Tiles
+        if (AssetDatabase.IsValidFolder(innerCornerPath))
+        {
+            anyAssigned |= AssignTilesFromDirectionalFolder(innerCornerPath, new Dictionary<string, SerializedProperty>
+        {
+            {"topleft", wallTileInnerTopLeftProp.FindPropertyRelative("tile")},
+            {"topright", wallTileInnerTopRightProp.FindPropertyRelative("tile")},
+            {"bottomleft", wallTileInnerBottomLeftProp.FindPropertyRelative("tile")},
+            {"bottomright", wallTileInnerBottomRightProp.FindPropertyRelative("tile")}
+        });
+        }
+
+        // Process Outer Corner Tiles
+        if (AssetDatabase.IsValidFolder(outerCornerPath))
+        {
+            anyAssigned |= AssignTilesFromDirectionalFolder(outerCornerPath, new Dictionary<string, SerializedProperty>
+        {
+            {"topleft", wallTileOuterTopLeftProp.FindPropertyRelative("tile")},
+            {"topright", wallTileOuterTopRightProp.FindPropertyRelative("tile")},
+            {"bottomleft", wallTileOuterBottomLeftProp.FindPropertyRelative("tile")},
+            {"bottomright", wallTileOuterBottomRightProp.FindPropertyRelative("tile")}
+        });
+        }
+
+        return anyAssigned;
+    }
+
+    // Helper method to assign tiles from a specific directional folder
+    private bool AssignTilesFromDirectionalFolder(string folderPath, Dictionary<string, SerializedProperty> propertyMap)
+    {
+        bool anyAssigned = false;
+        string[] tileGuids = AssetDatabase.FindAssets("t:TileBase", new[] { folderPath });
+
+        Debug.Log($"Found {tileGuids.Length} tile assets in {folderPath}");
+
+        foreach (string guid in tileGuids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            string fileName = Path.GetFileNameWithoutExtension(path).ToLower();
+
+            foreach (var mapping in propertyMap)
+            {
+                string key = mapping.Key.ToLower();
+
+                // Check if file name contains the direction keyword
+                if (fileName.Contains(key))
+                {
+                    TileBase tile = AssetDatabase.LoadAssetAtPath<TileBase>(path);
+                    if (tile != null)
+                    {
+                        mapping.Value.objectReferenceValue = tile;
+                        anyAssigned = true;
+                        Debug.Log($"Assigned {key} tile: {tile.name} from {path}");
+                    }
+                }
+            }
+        }
+
+        return anyAssigned;
     }
 
 
