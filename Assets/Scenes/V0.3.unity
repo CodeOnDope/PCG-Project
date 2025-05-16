@@ -427,7 +427,7 @@ MonoBehaviour:
   floorTileVariants: []
   wallTileVariants: []
   variantTileChance: 0.4
-  seed: 1965566783
+  seed: 116574490
   useRandomSeed: 1
   playerPrefab: {fileID: 3548798236488958899, guid: 233e123314ae4e948bcc465afc76dfb9, type: 3}
   enemyPrefab: {fileID: 7773039407867173279, guid: a722c0378e102014a9dfbe64ebc335bf, type: 3}

@@ -12,7 +12,7 @@ using System.Collections.Generic;
 // ╚═╝      ╚═════╝  ╚═════╝    ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝    ╚═════╝ ╚══════╝╚═╝  ╚═══╝
 //
 // PCG Level Generator for Unity
-// Copyright (c) 2025 Dineshkumar & Kamalanathan
+// Copyright © 2025 Dineshkumar, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan
 // Version: 1.0.0
 
 namespace PCGLevelGenerator
@@ -39,12 +39,15 @@ namespace PCGLevelGenerator
                 if (existingGenerator != null) Object.DestroyImmediate(existingGenerator);
             }
 
+            // Create required sorting layers
+            CreateSortingLayers();
+
             // --- Create Grid with exactly three Tilemaps ---
             GameObject gridObject = new GameObject("Grid");
             Grid grid = gridObject.AddComponent<Grid>();
             grid.cellSize = new Vector3(1, 1, 0);
 
-            // Create only the three tilemaps required
+            // Create only the three tilemaps required with proper sorting layers
             Tilemap groundTilemap = CreateTilemap(gridObject, "GroundMap", 0, "Ground");
             Tilemap wallTilemap = CreateTilemap(gridObject, "WallMap", 1, "Walls");
             Tilemap decorTilemap = CreateTilemap(gridObject, "DecorMap", 2, "Decors");
@@ -88,6 +91,52 @@ namespace PCGLevelGenerator
                 "Got it!");
         }
 
+        // Create required sorting layers if they don't exist
+        private static void CreateSortingLayers()
+        {
+            string[] requiredLayers = new string[] { "Ground", "Walls", "Decors", "Player", "UI" };
+
+            // Get the TagManager asset
+            SerializedObject tagManager = new SerializedObject(
+                AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset")[0]
+            );
+
+            // Get the sorting layers array
+            SerializedProperty sortingLayersProp = tagManager.FindProperty("m_SortingLayers");
+
+            if (sortingLayersProp != null)
+            {
+                // Check existing layers to avoid duplicates
+                HashSet<string> existingLayers = new HashSet<string>();
+                for (int i = 0; i < sortingLayersProp.arraySize; i++)
+                {
+                    SerializedProperty layerProp = sortingLayersProp.GetArrayElementAtIndex(i);
+                    string layerName = layerProp.FindPropertyRelative("name").stringValue;
+                    existingLayers.Add(layerName);
+                }
+
+                // Add any missing layers
+                foreach (string layerName in requiredLayers)
+                {
+                    if (!existingLayers.Contains(layerName))
+                    {
+                        // Add a new layer
+                        sortingLayersProp.arraySize++;
+                        SerializedProperty newLayer = sortingLayersProp.GetArrayElementAtIndex(sortingLayersProp.arraySize - 1);
+
+                        // Set a unique ID
+                        newLayer.FindPropertyRelative("uniqueID").intValue = layerName.GetHashCode();
+                        newLayer.FindPropertyRelative("name").stringValue = layerName;
+                        newLayer.FindPropertyRelative("locked").boolValue = false;
+
+                        Debug.Log($"Created sorting layer: {layerName}");
+                    }
+                }
+
+                // Apply the changes
+                tagManager.ApplyModifiedProperties();
+            }
+        }
 
         private static void SetupCameraFollow()
         {
@@ -300,10 +349,9 @@ namespace PCGLevelGenerator
             else
                 Debug.LogWarning("Failed to assign Floor Tile!");
         }
-        // Keep your existing methods here...
+
         private static Tilemap CreateTilemap(GameObject parent, string name, int sortingOrder, string sortingLayer = "Default")
         {
-            // Your existing code
             GameObject tilemapObject = new GameObject(name);
             tilemapObject.transform.SetParent(parent.transform);
 
@@ -313,11 +361,8 @@ namespace PCGLevelGenerator
             // Set properties
             renderer.sortingOrder = sortingOrder;
 
-            // Try to set sorting layer if it exists
-            if (SortingLayer.NameToID(sortingLayer) != 0)
-            {
-                renderer.sortingLayerName = sortingLayer;
-            }
+            // Set sorting layer if it exists
+            renderer.sortingLayerName = sortingLayer;
 
             // Add TilemapCollider2D if this is the WallMap
             if (name == "WallMap")
@@ -330,7 +375,6 @@ namespace PCGLevelGenerator
 
         private static GameObject CreateHolderObject(GameObject parent, string name)
         {
-            // Your existing code
             GameObject holder = new GameObject(name);
             holder.transform.SetParent(parent.transform);
             holder.transform.localPosition = Vector3.zero;
@@ -339,19 +383,24 @@ namespace PCGLevelGenerator
 
         private static void AssignPrefabs(HybridLevelGenerator generator)
         {
-            // Your existing AssignPrefabs method
             // Auto-assign prefabs from the PCGLevelGenerator/Prefabs folder
             string prefabsPath = "Assets/PCGLevelGenerator/Prefabs";
 
             // Try to find Player prefab
             GameObject playerPrefab = FindPrefab(prefabsPath, "Player");
             if (playerPrefab != null)
+            {
                 generator.playerPrefab = playerPrefab;
+                SetPrefabSortingLayer(playerPrefab, "Player");
+            }
 
             // Try to find Enemy prefab
             GameObject enemyPrefab = FindPrefab(prefabsPath, "Enemy");
             if (enemyPrefab != null)
+            {
                 generator.enemyPrefab = enemyPrefab;
+                SetPrefabSortingLayer(enemyPrefab, "Player");
+            }
 
             // Try to find Tree/Decoration prefab
             GameObject decorPrefab = FindPrefab(prefabsPath, "Tree");
@@ -359,7 +408,23 @@ namespace PCGLevelGenerator
                 decorPrefab = FindPrefab(prefabsPath, "Decoration");
 
             if (decorPrefab != null)
+            {
                 generator.decorationPrefab = decorPrefab;
+                SetPrefabSortingLayer(decorPrefab, "Decors");
+            }
+
+            // Find and set sorting layers for bullet prefabs
+            GameObject bulletEnPrefab = FindPrefab(prefabsPath, "BulletEn");
+            if (bulletEnPrefab != null)
+            {
+                SetPrefabSortingLayer(bulletEnPrefab, "Player");
+            }
+
+            GameObject bulletPlPrefab = FindPrefab(prefabsPath, "BulletPl");
+            if (bulletPlPrefab != null)
+            {
+                SetPrefabSortingLayer(bulletPlPrefab, "Player");
+            }
 
             // Try to find Room Templates for hybrid generation
             string templatePath = prefabsPath + "/Room Templates";
@@ -385,9 +450,52 @@ namespace PCGLevelGenerator
             }
         }
 
+        // Set the sorting layer for a prefab's renderers
+        private static void SetPrefabSortingLayer(GameObject prefab, string sortingLayerName)
+        {
+            // We need to use prefab modification for this
+            string prefabPath = AssetDatabase.GetAssetPath(prefab);
+
+            if (string.IsNullOrEmpty(prefabPath))
+                return;
+
+            // Open the prefab for editing
+            GameObject prefabInstance = PrefabUtility.LoadPrefabContents(prefabPath);
+            bool madeChanges = false;
+
+            // Set sorting layer on all renderers
+            foreach (Renderer renderer in prefabInstance.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer.sortingLayerName != sortingLayerName)
+                {
+                    renderer.sortingLayerName = sortingLayerName;
+                    madeChanges = true;
+                }
+            }
+
+            // Set sorting layer on all sprite renderers (redundant with above, but just to be safe)
+            foreach (SpriteRenderer renderer in prefabInstance.GetComponentsInChildren<SpriteRenderer>(true))
+            {
+                if (renderer.sortingLayerName != sortingLayerName)
+                {
+                    renderer.sortingLayerName = sortingLayerName;
+                    madeChanges = true;
+                }
+            }
+
+            // Save changes if needed
+            if (madeChanges)
+            {
+                PrefabUtility.SaveAsPrefabAsset(prefabInstance, prefabPath);
+                Debug.Log($"Set sorting layer '{sortingLayerName}' on prefab: {prefab.name}");
+            }
+
+            // Unload the prefab
+            PrefabUtility.UnloadPrefabContents(prefabInstance);
+        }
+
         private static GameObject FindPrefab(string basePath, string prefabName)
         {
-            // Your existing FindPrefab method
             string[] guids = AssetDatabase.FindAssets("t:GameObject " + prefabName);
 
             foreach (string guid in guids)
@@ -417,7 +525,6 @@ namespace PCGLevelGenerator
 
         private static TileBase FindDefaultTile(string tileType)
         {
-            // Your existing FindDefaultTile method
             // First look in our own package
             string packagePath = "Assets/PCGLevelGenerator/Tiles/";
             if (Directory.Exists(packagePath))
@@ -478,7 +585,7 @@ namespace PCGLevelGenerator
 
         public static void ShowWindow()
         {
-            PCGLevelGeneratorWelcome window = GetWindow<PCGLevelGeneratorWelcome>(true, "PCG Level Generator", true);
+            PCGLevelGeneratorWelcome window = GetWindow<PCGLevelGeneratorWelcome>(true, "PCG Level Master", true);
             window.minSize = new Vector2(450, 400);
             window.Show();
         }
@@ -500,9 +607,9 @@ namespace PCGLevelGenerator
             GUILayout.Space(10);
 
             // Title
-            GUILayout.Label("PCG Level Generator", EditorStyles.boldLabel);
+            GUILayout.Label("PCG Level Master", EditorStyles.boldLabel);
 
-            GUILayout.Label("Developed by Dineshkumar & Kamalanathan", EditorStyles.centeredGreyMiniLabel);
+            GUILayout.Label("Developed by Dineshkumar, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan", EditorStyles.centeredGreyMiniLabel);
             GUILayout.Space(10);
             EditorGUILayout.EndVertical();
 
@@ -510,7 +617,7 @@ namespace PCGLevelGenerator
 
             // Info box
             EditorGUILayout.HelpBox(
-                "Welcome to PCG Level Generator!\n\n" +
+                "Welcome to PCG Level Master!\n\n" +
                 "This asset provides three powerful ways to create procedural 2D levels:\n" +
                 "• Fully Procedural: Classic BSP dungeons\n" +
                 "• Hybrid Procedural: Mixing auto-generation with custom templates\n" +
@@ -530,16 +637,16 @@ namespace PCGLevelGenerator
 
             // Info text
             EditorGUILayout.HelpBox(
-                "This will set up a complete PCG Level Generator system with all required components in your scene.",
+                "This will set up a complete PCG Level Master system with all required components in your scene.",
                 MessageType.None);
 
 
             GUILayout.FlexibleSpace();
 
             // Footer
-            GUILayout.Label("You can access these tools anytime via the Tools > PCG Level Generator menu",
+            GUILayout.Label("You can access these tools anytime via the Tools > PCG Level Master menu",
                 EditorStyles.centeredGreyMiniLabel);
-            GUILayout.Label("© 2025 Dineshkumar & Kamalanathan. All rights reserved.",
+            GUILayout.Label("Copyright © 2025 Dineshkumar, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan. All rights reserved.",
                 EditorStyles.centeredGreyMiniLabel);
 
             GUILayout.Space(10);
@@ -547,7 +654,7 @@ namespace PCGLevelGenerator
         }
 
         // Single combined menu item
-        [MenuItem("Tools/PCG Level Generator/Setup & Welcome")]
+        [MenuItem("Tools/PCG Level Master/Setup & Welcome")]
         public static void ShowSetupAndWelcome()
         {
             ShowWindow();

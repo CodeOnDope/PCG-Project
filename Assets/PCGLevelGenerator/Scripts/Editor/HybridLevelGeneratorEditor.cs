@@ -14,7 +14,7 @@ using System.IO; // Needed for Tilemap checks
 // ╚═╝      ╚═════╝  ╚═════╝    ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝    ╚═════╝ ╚══════╝╚═╝  ╚═══╝
 //
 // PCG Level Generator for Unity
-// Copyright (c) 2025 Dineshkumar & Kamalanathan
+// Copyright © 2025 Dineshkumar, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan
 // Version: 1.0.0
 
 
@@ -117,11 +117,30 @@ public class HybridLevelGeneratorEditor : Editor
     {
         if (stylesInitialized) return;
 
-        headerColor = EditorGUIUtility.isProSkin ? new Color(0.18f, 0.22f, 0.25f) : new Color(0.8f, 0.82f, 0.85f);
-        accentColor = EditorGUIUtility.isProSkin ? new Color(0.3f, 0.6f, 1f) : new Color(0.2f, 0.5f, 0.9f);
-        modeColors[0] = EditorGUIUtility.isProSkin ? new Color(0.4f, 0.6f, 0.9f, 0.8f) : new Color(0.5f, 0.7f, 1.0f, 0.8f);
-        modeColors[1] = EditorGUIUtility.isProSkin ? new Color(0.9f, 0.6f, 0.3f, 0.8f) : new Color(1.0f, 0.7f, 0.4f, 0.8f);
-        modeColors[2] = EditorGUIUtility.isProSkin ? new Color(0.4f, 0.8f, 0.5f, 0.8f) : new Color(0.5f, 0.9f, 0.6f, 0.8f);
+        headerColor = EditorGUIUtility.isProSkin
+    ? new Color(0.0f, 0.208f, 0.4f) // 003566 dark blue
+    : new Color(0.0f, 0.208f, 0.4f, 0.9f);
+
+        // Accent - Use blue (00bbf9)
+        accentColor = EditorGUIUtility.isProSkin
+            ? new Color(0f, 0.733f, 0.976f) // 00bbf9 blue
+            : new Color(0f, 0.733f, 0.976f);
+
+        // Mode Colors - Using the remaining colors
+        // Fully Procedural - Teal (00f5d4)
+        modeColors[0] = EditorGUIUtility.isProSkin
+            ? new Color(0f, 0.961f, 0.831f, 0.8f) // 00f5d4 teal with transparency
+            : new Color(0f, 0.961f, 0.831f, 0.8f);
+
+        // Hybrid Procedural - Pink (f15bb5)
+        modeColors[1] = EditorGUIUtility.isProSkin
+            ? new Color(0.945f, 0.357f, 0.71f, 0.8f) // f15bb5 pink with transparency
+            : new Color(0.945f, 0.357f, 0.71f, 0.8f);
+
+        // User Defined Layout - Yellow (fee440)
+        modeColors[2] = EditorGUIUtility.isProSkin
+            ? new Color(0.996f, 0.894f, 0.251f, 0.8f) // fee440 yellow with transparency
+            : new Color(0.996f, 0.894f, 0.251f, 0.8f);
         generateButtonColor = EditorGUIUtility.isProSkin ? new Color(0.2f, 0.7f, 0.5f) : new Color(0.3f, 0.8f, 0.6f);
         clearButtonColor = EditorGUIUtility.isProSkin ? new Color(0.8f, 0.3f, 0.3f) : new Color(0.9f, 0.4f, 0.4f);
 
@@ -400,7 +419,7 @@ public class HybridLevelGeneratorEditor : Editor
         EditorGUILayout.Space(5);
         Rect r = GUILayoutUtility.GetRect(GUIContent.none, headerStyle, GUILayout.Height(30));
         EditorGUI.DrawRect(r, headerColor);
-        GUI.Label(r, "Hybrid Procedural Level Generator", headerStyle);
+        GUI.Label(r, "PCG Level Master", headerStyle);
         EditorGUILayout.Space(5);
 
         // Top action buttons row
@@ -471,7 +490,7 @@ public class HybridLevelGeneratorEditor : Editor
         GUIStyle creditStyle = new GUIStyle(EditorStyles.miniLabel);
         creditStyle.alignment = TextAnchor.MiddleCenter;
         creditStyle.normal.textColor = EditorGUIUtility.isProSkin ? new Color(0.7f, 0.7f, 0.7f) : new Color(0.4f, 0.4f, 0.4f);
-        EditorGUILayout.LabelField("Developed by Dineshkumar & Kamalanathan", creditStyle);
+        EditorGUILayout.LabelField("Developed by Dineshkumar, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan", creditStyle);
         EditorGUILayout.Space(5);
     }
 
