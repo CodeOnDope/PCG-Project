@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCG Level Master - Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-primary: #14b8a6;
+            --color-primary-light: #2dd4bf;
+            --color-primary-dark: #0d9488;
+            --color-bg-dark: #0b0f1a;
+            --color-bg-medium: #171e2e;
+            --color-bg-light: #1e293b;
+            --color-text-light: #e2e8f0;
+            --color-text-muted: #94a3b8;
+            --color-border: #334155;
+            --color-accent: #8b5cf6;
+            --color-accent-light: #a78bfa;
+            --color-warning: #f59e0b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            line-height: 1.5;
+            background-color: var(--color-bg-dark);
+            color: var(--color-text-light);
+            overflow-x: hidden;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            margin-top: 1.5em;
+            margin-bottom: 0.75em;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-top: 0;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            border-bottom: 1px solid var(--color-border);
+            padding-bottom: 0.5rem;
+        }
+
+        h3 {
+            font-size: 1.4rem;
+        }
+
+        h4 {
+            font-size: 1.2rem;
+        }
+
+        p {
+            margin-bottom: 1rem;
+        }
+
+        a {
+            color: var(--color-primary-light);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        code {
+            font-family: Consolas, Monaco, 'Andale Mono', monospace;
+            background-color: rgba(0, 0, 0, 0.2);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: var(--color-bg-medium);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin-bottom: 1.5rem;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+
+        ul, ol {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+            list-style-position: outside;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+            border: 1px solid var(--color-border);
+            transition: transform 0.2s;
+        }
+
+        img:hover {
+            transform: scale(1.01);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+            border-radius: 0.5rem;
+        }
+
+        thead {
+            background-color: var(--color-bg-medium);
+        }
+
+        th, td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        th {
+            font-weight: 600;
+        }
+
+        tr:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        header {
+            background-color: var(--color-bg-medium);
+            padding: 1.5rem 0;
+            border-bottom: 1px solid var(--color-border);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            font-weight: 700;
+            font-size: 1.5rem;
+            color: var(--color-primary-light);
+        }
+
+        .sidebar {
+            width: 280px;
+            position: sticky;
+            top: 5.5rem;
+            height: calc(100vh - 5.5rem);
+            overflow-y: auto;
+            padding-right: 1.5rem;
+            padding-top: 1.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            background-color: var(--color-bg-medium);
+            margin-right: 15px;
+            border-radius: 0.5rem;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: var(--color-bg-medium);
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: var(--color-border);
+            border-radius: 4px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: var(--color-text-muted);
+        }
+
+        .sidebar-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--color-border);
+            color: var(--color-primary-light);
+            text-align: center;
+        }
+
+        .nav-list {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .nav-list li {
+            margin-bottom: 0.25rem;
+        }
+
+        .nav-list a {
+            display: block;
+            padding: 0.5rem 0;
+            color: var(--color-text-muted);
+            transition: all 0.2s;
+            border-left: 2px solid transparent;
+            padding-left: 0.75rem;
+            font-weight: 500;
+        }
+
+        .nav-list a:hover {
+            color: var(--color-text-light);
+            text-decoration: none;
+            border-left-color: var(--color-primary);
+            background-color: rgba(20, 184, 166, 0.05);
+        }
+
+        .nav-list a.active {
+            color: var(--color-primary-light);
+            border-left-color: var(--color-primary);
+            font-weight: 600;
+            background-color: rgba(20, 184, 166, 0.1);
+        }
+
+        .subnav-list {
+            list-style-type: none;
+            padding-left: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .subnav-list a {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.9rem;
+            font-weight: normal;
+        }
+
+        .content {
+            flex: 1;
+            padding: 1.5rem 1.5rem 3rem 2rem;
+            max-width: 900px;
+            background-color: var(--color-bg-dark);
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        .note {
+            background-color: rgba(20, 184, 166, 0.1);
+            border-left: 4px solid var(--color-primary);
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-radius: 0.25rem;
+        }
+
+        .warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            border-left: 4px solid var(--color-warning);
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-radius: 0.25rem;
+        }
+
+        .callout {
+            background-color: var(--color-bg-light);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--color-border);
+        }
+
+        .callout-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .callout-icon {
+            width: 24px;
+            height: 24px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: var(--color-primary);
+            color: white;
+            border-radius: 50%;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card {
+            background-color: var(--color-bg-light);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            border: 1px solid var(--color-border);
+            transition: all 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background-color: var(--color-primary);
+            color: white;
+            border-radius: 0.25rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .btn:hover {
+            background-color: var(--color-primary-dark);
+            text-decoration: none;
+        }
+
+        .btn-secondary {
+            background-color: var(--color-bg-medium);
+            border: 1px solid var(--color-border);
+            color: var(--color-text-light);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--color-bg-light);
+        }
+
+        .steps {
+            list-style-type: none;
+            padding-left: 2.5rem;
+            counter-reset: step-counter;
+            margin-bottom: 1.5rem;
+        }
+
+        .steps li {
+            counter-increment: step-counter;
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        .steps li::before {
+            content: counter(step-counter);
+            position: absolute;
+            left: -2.5rem;
+            top: -0.25rem;
+            background-color: var(--color-primary);
+            color: white;
+            font-weight: bold;
+            border-radius: 50%;
+            width: 1.75rem;
+            height: 1.75rem;
+            line-height: 1.75rem;
+            text-align: center;
+            font-size: 0.875rem;
+        }
+
+        .steps li ul {
+            margin-top: 0.5rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            background-color: var(--color-primary);
+            color: white;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-left: 0.5rem;
+        }
+
+        .badge-outline {
+            background-color: transparent;
+            border: 1px solid var(--color-primary);
+            color: var(--color-primary);
+        }
+
+        .divider {
+            height: 1px;
+            background-color: var(--color-border);
+            margin: 2rem 0;
+        }
+
+        .responsive-image {
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .feature-box {
+            background-color: var(--color-bg-light);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid var(--color-primary);
+        }
+
+        .feature-box h3 {
+            margin-top: 0;
+            color: var(--color-primary-light);
+        }
+
+        .footer {
+            background-color: var(--color-bg-medium);
+            padding: 2rem 0;
+            margin-top: 3rem;
+            border-top: 1px solid var(--color-border);
+            text-align: center;
+            color: var(--color-text-muted);
+            font-size: 0.875rem;
+        }
+
+        .parameters-table td:first-child {
+            font-weight: 600;
+            color: var(--color-primary-light);
+        }
+
+        .image-caption {
+            text-align: center;
+            font-style: italic;
+            color: var(--color-text-muted);
+            margin-top: -0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .mobile-nav-toggle {
+            display: none;
+            padding: 0.5rem;
+            background-color: var(--color-bg-medium);
+            border: 1px solid var(--color-border);
+            border-radius: 0.25rem;
+            cursor: pointer;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                position: relative;
+                height: auto;
+                padding-right: 0;
+                display: none;
+            }
+
+            .sidebar.active {
+                display: block;
+            }
+
+            .content {
+                padding-left: 0;
+            }
+
+            .mobile-nav-toggle {
+                display: block;
+            }
+
+            .header-content {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 1rem;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Theme toggle */
+        .theme-toggle {
+            background: none;
+            border: none;
+            color: var(--color-text-muted);
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .theme-toggle:hover {
+            color: var(--color-text-light);
+        }
+
+        /* For light theme (not used by default) */
+        body.light-theme {
+            --color-bg-dark: #f1f5f9;
+            --color-bg-medium: #e2e8f0;
+            --color-bg-light: #f8fafc;
+            --color-text-light: #0f172a;
+            --color-text-muted: #475569;
+            --color-border: #cbd5e1;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                PCG Level Master
+            </div>
+            <button class="mobile-nav-toggle" id="mobileSidebarToggle">
+                Menu
+            </button>
+        </div>
+    </header>
+
+    <div class="container">
+        <aside class="sidebar" id="sidebar">
+            <h2 class="sidebar-title">Table of Contents</h2>
+            <ul class="nav-list" id="navList">
+                <li><a href="#introduction">1. Introduction</a></li>
+                <li><a href="#installation">2. Installation</a></li>
+                <li><a href="#getting-started">3. Getting Started</a>
+                    <ul class="subnav-list">
+                        <li><a href="#quick-start">3.1. Quick Start</a></li>
+                        <li><a href="#setting-up-a-new-scene">3.2. Setting Up a New Scene</a></li>
+                    </ul>
+                </li>
+                <li><a href="#generation-methods">4. Generation Methods</a>
+                    <ul class="subnav-list">
+                        <li><a href="#fully-procedural">4.1. Fully Procedural</a></li>
+                        <li><a href="#hybrid-procedural">4.2. Hybrid Procedural</a></li>
+                        <li><a href="#user-defined-layout">4.3. User Defined Layout</a></li>
+                    </ul>
+                </li>
+                <li><a href="#tilemap-integration">5. Tilemap Integration</a></li>
+                <li><a href="#entity-placement">6. Entity Placement</a></li>
+                <li><a href="#parameter-reference">7. Parameter Reference</a>
+                    <ul class="subnav-list">
+                        <li><a href="#level-dimensions-seed">7.1. Level Dimensions & Seed</a></li>
+                        <li><a href="#bsp-algorithm-settings">7.2. BSP Algorithm Settings</a></li>
+                        <li><a href="#hybrid-room-settings">7.3. Hybrid Room Settings</a></li>
+                        <li><a href="#corridor-settings">7.4. Corridor Settings</a></li>
+                        <li><a href="#entities-decorations">7.5. Entities & Decorations</a></li>
+                    </ul>
+                </li>
+                <li><a href="#visual-level-designer">8. Visual Level Designer</a>
+                    <ul class="subnav-list">
+                        <li><a href="#designer-interface">8.1. Designer Interface</a></li>
+                        <li><a href="#creating-rooms">8.2. Creating Rooms</a></li>
+                        <li><a href="#connecting-rooms">8.3. Connecting Rooms</a></li>
+                        <li><a href="#keyboard-shortcuts">8.4. Keyboard Shortcuts</a></li>
+                    </ul>
+                </li>
+                <li><a href="#creating-room-templates">9. Creating Room Templates</a></li>
+                <li><a href="#troubleshooting">10. Troubleshooting</a>
+                    <ul class="subnav-list">
+                        <li><a href="#common-issues">10.1. Common Issues</a></li>
+                        <li><a href="#performance-considerations">10.2. Performance Considerations</a></li>
+                    </ul>
+                </li>
+                <li><a href="#support">11. Support</a></li>
+            </ul>
+        </aside>
+
+        <main class="content">
+            <h1 id="introduction">1. Introduction</h1>
+            <p>PCG Level Master is a professional procedural level generation system for Unity that combines algorithmic generation with template-based design. This hybrid approach provides unlimited level variety while maintaining complete creative control over the results.</p>
+            <p>The system uses Binary Space Partitioning (BSP) as its foundation, enhanced with custom room templates, L-shaped corridor connections, and advanced tile placement algorithms. All generated levels are output directly to Unity's built-in Tilemap system, making integration with your existing game seamless.</p>
+
+            <img src="image1.png" alt="Level generated in the Unity scene view using PCG Level Master" class="responsive-image">
+            <p class="image-caption">Fig 1: Level generated in the Unity scene view using PCG Level Master</p>
+
+            <div class="feature-box">
+                <h3>Key Features</h3>
+                <ul>
+                    <li><strong>Three Generation Methods:</strong> Choose from Fully Procedural, Hybrid Procedural, or User Defined Layout to match your game's needs.</li>
+                    <li><strong>BSP Algorithm:</strong> Industry-standard Binary Space Partitioning creates balanced, naturally flowing level layouts.</li>
+                    <li><strong>Custom Room Templates:</strong> Design your own room templates and integrate them with procedural generation.</li>
+                    <li><strong>Visual Designer:</strong> Drag and drop interface for manually designing level layouts with precise control.</li>
+                    <li><strong>Entity Placement:</strong> Automatic player, enemy, and decoration placement based on customizable rules.</li>
+                    <li><strong>Full Source Code:</strong> Complete C# source code included for maximum customization and extension.</li>
+                </ul>
+            </div>
+
+            <h2 id="installation">2. Installation</h2>
+            
+            <h3>Option A: Import from Unity Asset Store (Recommended)</h3>
+            <ol class="steps">
+                <li>Purchase PCG Level Master from the Unity Asset Store.</li>
+                <li>In Unity, go to Window → Package Manager.</li>
+                <li>Select "My Assets" from the dropdown menu.</li>
+                <li>Find PCG Level Master and click Download.</li>
+                <li>Once downloaded, click Import.</li>
+                <li>In the import window, ensure all components are selected and click Import.</li>
+            </ol>
+
+            <h3>Option B: Manual Installation</h3>
+            <ol class="steps">
+                <li>Download the PCG Level Master package file (.unitypackage).</li>
+                <li>In your Unity project, go to Assets → Import Package → Custom Package...</li>
+                <li>Navigate to the downloaded package file and select it.</li>
+                <li>Ensure all components are selected and click Import.</li>
+            </ol>
+
+            <div class="note">
+                <p>After importing, you can find example scenes in the <code>Assets > PCGLevelGenerator > Examples</code> folder.</p>
+            </div>
+
+            <h2 id="getting-started">3. Getting Started</h2>
+            <p>Get up and running with PCG Level Master in minutes:</p>
+
+            <h3 id="quick-start">3.1. Quick Start</h3>
+            <ol class="steps">
+                <li><strong>Open an Example Scene or Set Up Your Own</strong><br>
+                Navigate to <code>Assets > PCGLevelGenerator > Examples</code> and open one of the example scenes, or follow the "Setting Up a New Scene" section below.</li>
+                
+                <li><strong>Select the HybridLevelGenerator GameObject</strong><br>
+                Find and select the HybridLevelGenerator GameObject in the Hierarchy.</li>
+                
+                <li><strong>Initialize Assets</strong><br>
+                In the Inspector, click the <strong>Initialize Assets</strong> button. This will set up the necessary references for generation.</li>
+                
+                <li><strong>Generate Level</strong><br>
+                Click the <strong>Generate Level</strong> button to create a game level. You'll see a complete procedural level appear in the scene view!</li>
+                
+                <li><strong>Explore and Experiment</strong><br>
+                You can click the Generate Level button again to create new variations, or adjust parameters to customize the generation.</li>
+                
+                <li><strong>Play the Scene</strong><br>
+                Click the Play button in Unity to experience the generated level.</li>
+            </ol>
+
+            <img src="image2.png" alt="PCG Level Master inspector showing the Initialize Assets and Generate Level buttons" class="responsive-image">
+            <p class="image-caption">Fig 2: PCG Level Master inspector showing the Initialize Assets and Generate Level buttons</p>
+
+            <h3 id="setting-up-a-new-scene">3.2. Setting Up a New Scene</h3>
+            <ol class="steps">
+                <li>Create a new Unity scene or use an existing one.</li>
+                <li>Create a Grid GameObject: GameObject → 2D Object → Grid</li>
+                <li>Add two Tilemap children to the Grid:
+                    <ul>
+                        <li>Right-click on Grid → 2D Object → Tilemap (name it "GroundTilemap")</li>
+                        <li>Right-click on Grid → 2D Object → Tilemap (name it "WallTilemap")</li>
+                        <li>Add a Tilemap Collider 2D component to the WallTilemap</li>
+                    </ul>
+                </li>
+                <li>Create a new empty GameObject and name it "LevelGenerator"</li>
+                <li>Add the HybridLevelGenerator component to the LevelGenerator GameObject: Add Component → PCG Level Master → Hybrid Level Generator</li>
+                <li>Click the Initialize Assets button, then Generate Level</li>
+            </ol>
+
+            <div class="note">
+                <p>Alternatively, you can use the automated setup by going to Tools → PCG Level Master → Setup & Welcome. This will create all the required components for you automatically.</p>
+            </div>
+
+            <h2 id="generation-methods">4. Generation Methods</h2>
+            <p>PCG Level Master offers three distinct generation methods, each providing different levels of control and procedural variety. You can select the generation method from the dropdown in the Inspector.</p>
+
+            <h3 id="fully-procedural">4.1. Fully Procedural</h3>
+            <p>Fully Procedural generation uses Binary Space Partitioning (BSP) to create classic dungeon layouts with rectangular rooms and corridors. This method offers the highest level of procedural variety but less control over specific room layouts.</p>
+
+            <img src="image3.png" alt="Fully Procedural settings in inspector" class="responsive-image">
+            <p class="image-caption">Fig 3: Fully Procedural settings in the inspector of HybridLevelGenerator GameObject</p>
+
+            <div class="callout">
+                <div class="callout-title"><span class="callout-icon">✓</span> Key Features</div>
+                <ul>
+                    <li>Pure BSP-based generation algorithm</li>
+                    <li>Rectangular rooms with configurable size parameters</li>
+                    <li>Automatic L-shaped corridor connections using Minimum Spanning Tree (MST)</li>
+                    <li>Complete randomization (with seed control)</li>
+                    <li>Fastest generation speed</li>
+                </ul>
+            </div>
+
+            <div class="note">
+                <p><strong>Best For:</strong> Roguelike games, infinite dungeons, or any application where variety and replayability are more important than specific room designs.</p>
+            </div>
+
+            <h4>Parameters</h4>
+            <p>The Fully Procedural generation method includes the following parameter groups:</p>
+
+            <h5>Level Dimensions & Seed</h5>
+            <ul>
+                <li><strong>Level Width:</strong> Width of the level grid in tiles (default: 100)</li>
+                <li><strong>Level Height:</strong> Height of the level grid in tiles (default: 100)</li>
+                <li><strong>Use Random Seed:</strong> When enabled, generates a new random seed each time</li>
+                <li><strong>Seed Value:</strong> The specific seed value to use when "Use Random Seed" is disabled</li>
+                <li><strong>New</strong> button: Generates a new random seed value</li>
+            </ul>
+
+            <img src="image4.png" alt="Tilemap integration settings for fully procedural generation" class="responsive-image">
+            <p class="image-caption">Fig 4: Tilemap integration settings for fully procedural generation</p>
+
+            <h5>BSP Algorithm Settings</h5>
+            <ul>
+                <li><strong>Min Room Size:</strong> Minimum width/height for rooms in tiles (default: 8)</li>
+                <li><strong>BSP Iterations:</strong> Number of BSP splits (controls room count) (default: 5)</li>
+                <li><strong>Room Padding:</strong> Minimum space between room edge and partition (default: 2)</li>
+            </ul>
+
+            <h5>Corridor Settings</h5>
+            <ul>
+                <li><strong>Corridor Width:</strong> Width of corridors in tiles (default: 2)</li>
+            </ul>
+
+            <img src="image5.png" alt="Entity placement settings for fully procedural generation" class="responsive-image">
+            <p class="image-caption">Fig 5: Entity placement settings for fully procedural generation</p>
+
+            <h4>Algorithm Details</h4>
+            <p>The Fully Procedural method implements the following algorithm:</p>
+            <ol>
+                <li>Start with the entire level space as a single partition</li>
+                <li>Recursively split partitions either horizontally or vertically</li>
+                <li>Split direction is determined by partition aspect ratio</li>
+                <li>Stop splitting when minimum size is reached or max iterations is hit</li>
+                <li>Create rooms within the resulting leaf partitions</li>
+                <li>Connect rooms with L-shaped corridors using Minimum Spanning Tree (MST) algorithm</li>
+                <li>Apply tiles to Unity Tilemaps</li>
+                <li>Spawn entities (player, enemies, decorations) if specified</li>
+            </ol>
+
+            <h4>Examples & Tips</h4>
+
+            <div class="grid">
+                <div class="card">
+                    <h5 class="card-title">Creating More Rooms</h5>
+                    <p>To increase the number of rooms in your level:</p>
+                    <ul>
+                        <li>Increase the <strong>BSP Iterations</strong> value (try 6-7)</li>
+                        <li>Decrease the <strong>Min Room Size</strong> value (try 6-7)</li>
+                        <li>Increase level dimensions for more space</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h5 class="card-title">Creating Larger Rooms</h5>
+                    <p>For larger, more spacious rooms:</p>
+                    <ul>
+                        <li>Increase the <strong>Min Room Size</strong> value (try 10-12)</li>
+                        <li>Decrease <strong>BSP Iterations</strong> for fewer, larger spaces</li>
+                        <li>Reduce <strong>Room Padding</strong> to allow rooms to fill more of their partition</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h5 class="card-title">Creating Consistent Layouts</h5>
+                    <p>To create reproducible level designs:</p>
+                    <ul>
+                        <li>Disable <strong>Use Random Seed</strong></li>
+                        <li>Set a specific <strong>Seed Value</strong></li>
+                        <li>Keep all other parameters the same</li>
+                        <li>The same seed will always produce the same layout with the same parameters</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3 id="hybrid-procedural">4.2. Hybrid Procedural</h3>
+            <p>Hybrid Procedural generation combines BSP-based level structure with custom room templates. This method offers a balance between procedural variety and designer control, allowing for specialized room designs within a procedurally generated framework.</p>
+
+            <img src="image7.png" alt="Hybrid Procedural generation method in the inspector" class="responsive-image">
+            <p class="image-caption">Fig 6: Hybrid Procedural generation method in the inspector</p>
+
+            <div class="callout">
+                <div class="callout-title"><span class="callout-icon">✓</span> Key Features</div>
+                <ul>
+                    <li>Combination of BSP algorithm and pre-designed templates</li>
+                    <li>Support for both rectangular and L-shaped rooms</li>
+                    <li>Template probability control</li>
+                    <li>MST corridor connections for optimal pathways</li>
+                    <li>Mix of procedural and hand-crafted elements</li>
+                </ul>
+            </div>
+
+            <img src="image8.png" alt="Hybrid Procedural settings showing room templates and probabilities" class="responsive-image">
+            <p class="image-caption">Fig 7: Hybrid Procedural settings showing room templates and probabilities</p>
+
+            <div class="note">
+                <p><strong>Best For:</strong> Games that need some specialized rooms (boss rooms, treasure rooms, puzzles) within an otherwise procedural environment.</p>
+            </div>
+
+            <h4>Parameters</h4>
+            <p>The Hybrid Procedural generation method includes all the parameters from Fully Procedural plus:</p>
+
+            <h5>Hybrid Room Settings</h5>
+            <ul>
+                <li><strong>L-Shape Chance:</strong> Probability of generating L-shaped rooms instead of rectangles (0-1)</li>
+                <li><strong>Template Chance:</strong> Probability of using a room template instead of procedural generation (0-1)</li>
+            </ul>
+
+            <h5>L-Shape Leg Ratios</h5>
+            <ul>
+                <li><strong>Min Leg Ratio:</strong> Minimum ratio of the smaller leg to the larger leg in L-shaped rooms</li>
+                <li><strong>Max Leg Ratio:</strong> Maximum ratio of the smaller leg to the larger leg in L-shaped rooms</li>
+            </ul>
+
+            <h5>Room Templates List</h5>
+            <p>The list of room template prefabs that can be used in generation. Each template has a green indicator showing its validity.</p>
+            <ul>
+                <li>Click the "+" button to add a new template</li>
+                <li>Click the "x" button to remove a template</li>
+                <li>Drag and drop template prefabs from your project</li>
+            </ul>
+
+            <img src="image9.png" alt="Room Templates from Assets > PCGLevelGenerator > Prefabs > Room Templates" class="responsive-image">
+            <p class="image-caption">Fig 8: Room Templates from Assets > PCGLevelGenerator > Prefabs > Room Templates</p>
+
+            <h4>Creating Custom Room Templates</h4>
+            <p>You can create your own room templates to be used in the Hybrid Procedural generation:</p>
+
+            <img src="image10.png" alt="Creating custom room prefabs using the Tile Palette" class="responsive-image">
+            <p class="image-caption">Fig 9: Creating custom room prefabs using the Tile Palette</p>
+
+            <ol class="steps">
+                <li>Create a new Unity scene for template design.</li>
+                <li>Add a Grid GameObject with a Tilemap child.</li>
+                <li>Design your room layout using the Tile Palette. Make sure your room has clear entrance/exit points for corridors.</li>
+                <li>Drag the Tilemap to your Project window to create a prefab, or use the Create Prefab option.</li>
+                <li>Add your prefab to the Room Templates List in the HybridLevelGenerator component.</li>
+            </ol>
+
+            <div class="note">
+                <p>Room templates should follow a consistent size convention for best results. The system will attempt to scale templates to fit the available space, but designs work best when they're relatively similar in size.</p>
+            </div>
+
+            <h4>Examples & Tips</h4>
+
+            <div class="grid">
+                <div class="card">
+                    <h5 class="card-title">Creating a Boss Room</h5>
+                    <p>To create a special boss room that appears in your levels:</p>
+                    <ul>
+                        <li>Design a larger room template with distinctive features</li>
+                        <li>Add it to the Room Templates List</li>
+                        <li>Set <strong>Template Chance</strong> high enough to ensure templates appear (0.5+)</li>
+                        <li>The boss room will be integrated into the level along with other rooms</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h5 class="card-title">Balancing Template Usage</h5>
+                    <p>To control how often templates appear versus procedural rooms:</p>
+                    <ul>
+                        <li>Adjust the <strong>Template Chance</strong> value:
+                            <ul>
+                                <li>0.0 = No templates used (pure procedural)</li>
+                                <li>0.5 = About half the rooms will be templates</li>
+                                <li>1.0 = All rooms will attempt to use templates</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h5 class="card-title">Creating L-Shaped Rooms</h5>
+                    <p>To generate interesting L-shaped rooms alongside rectangles:</p>
+                    <ul>
+                        <li>Increase <strong>L-Shape Chance</strong> to 0.3-0.5</li>
+                        <li>Adjust <strong>Min Leg Ratio</strong> and <strong>Max Leg Ratio</strong> to control the shape proportions</li>
+                        <li>L-shaped rooms add visual variety and interesting spaces</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h3 id="user-defined-layout">4.3. User Defined Layout</h3>
+            <p>User Defined Layout provides complete control over level design while still leveraging the powerful tile placement and entity spawning systems. This method allows you to manually place and connect rooms for maximum design control.</p>
+
+            <img src="image11.png" alt="User Defined Layout settings in the inspector" class="responsive-image">
+            <p class="image-caption">Fig 10: User Defined Layout settings in the inspector</p>
+
+            <div class="callout">
+                <div class="callout-title"><span class="callout-icon">✓</span> Key Features</div>
+                <ul>
+                    <li>Visual node-based layout designer</li>
+                    <li>Manual room placement and connection</li>
+                    <li>Room property configuration</li>
+                    <li>Support for both custom templates and procedural room generation</li>
+                    <li>Dynamic corridor generation between manually placed rooms</li>
+                </ul>
+            </div>
+
+            <div class="note">
+                <p><strong>Best For:</strong> Specific level designs for story missions, tutorials, or any scenario where precise control over the layout is required.</p>
+            </div>
+
+            <h4>Using the Visual Level Designer</h4>
+            <p>The User Defined Layout method revolves around the Visual Level Designer window:</p>
+
+            <img src="image12.png" alt="Visual Level Designer window with room creation options" class="responsive-image">
+            <p class="image-caption">Fig 11: Visual Level Designer window with room creation options</p>
+
+            <ol class="steps">
+                <li>Click the "Open Visual Level Designer" button in the Inspector.</li>
+                <li>In the designer window, right-click on the canvas to create a room. Choose from "Create Rect Room", "Create L-Shape Room", or "Create Template Room".</li>
+                <li>Configure room properties using the panel on the right. You can set size, type, and other parameters.</li>
+                <li>Create additional rooms as needed for your level. You can move rooms by dragging them.</li>
+            </ol>
+
+            <h4 id="connecting-rooms">Connecting Rooms</h4>
+            <p>Once you've created rooms, you need to connect them to form a cohesive level:</p>
+
+            <img src="image13.png" alt="Connecting rooms in the Visual Level Designer" class="responsive-image">
+            <p class="image-caption">Fig 12: Connecting rooms in the Visual Level Designer</p>
+
+            <ol class="steps">
+                <li>Click the "Connect" button on one room node.</li>
+                <li>Click on a target room to create a connection between the two rooms.</li>
+                <li>Repeat to connect all rooms in your layout. Each room should connect to at least one other room.</li>
+                <li>Right-click on connections to configure corridor properties if needed.</li>
+            </ol>
+
+            <div class="warning">
+                <p>All rooms must be connected to at least one other room for the level to generate properly. Isolated rooms will be ignored.</p>
+            </div>
+
+            <h4>Generating the Level</h4>
+            <ol class="steps">
+                <li>Click the "Create Scene Objects & Generate" button at the bottom of the Visual Level Designer.</li>
+                <li>Confirm the operation in the dialog that appears, then close the Visual Level Designer window.</li>
+                <li>The level will be generated according to your design and visible in the scene view.</li>
+            </ol>
+
+            <img src="image1.png" alt="The level created based on the User Defined Layout" class="responsive-image">
+            <p class="image-caption">Fig 13: The level created based on the User Defined Layout</p>
+
+            <h4>Examples & Tips</h4>
+
+            <div class="grid">
+                <div class="card">
+                    <h5 class="card-title">Creating a Linear Level</h5>
+                    <p>To create a level with a specific progression path:</p>
+                    <ul>
+                        <li>Place rooms in a sequence (start room, middle rooms, end room)</li>
+                        <li>Connect them in order to create a main path</li>
+                        <li>Add optional side rooms connecting to the main path</li>
+                        <li>Designate the starting room using the properties panel</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h5 class="card-title" id="keyboard-shortcuts">Using Keyboard Shortcuts</h5>
+                    <p>Speed up your workflow with these shortcuts:</p>
+                    <ul>
+                        <li><strong>F key:</strong> Center view on all nodes</li>
+                        <li><strong>O key:</strong> Focus on origin (0,0)</li>
+                        <li><strong>Middle-click drag:</strong> Pan the view</li>
+                        <li><strong>Mouse wheel:</strong> Zoom in/out</li>
+                    </ul>
+                </div>
+                
+                <div class="card">
+                    <h5 class="card-title">Saving and Loading Layouts</h5>
+                    <p>Save your work for later editing:</p>
+                    <ul>
+                        <li>Use the "Save" button to store your current layout</li>
+                        <li>Use "Open" to load a previously saved layout</li>
+                        <li>Layouts are saved as assets in your project</li>
+                    </ul>
+                </div>
+            </div>
+
+            <h2 id="tilemap-integration">5. Tilemap Integration</h2>
+            <p>PCG Level Master integrates seamlessly with Unity's built-in Tilemap system:</p>
+
+            <div class="grid">
+                <div>
+                    <img src="image5.png" alt="Floor and Wall Tile assets from the Project window" class="responsive-image">
+                    <p class="image-caption">Fig 14: Floor and Wall Tile assets from the Project window</p>
+                </div>
+                
+                <div>
+                    <img src="image6.png" alt="Directional Wall Tiles from the Project window" class="responsive-image">
+                    <p class="image-caption">Fig 15: Directional Wall Tiles from the Project window</p>
+                </div>
+            </div>
+
+            <h3>Required Tilemaps</h3>
+            <ul>
+                <li><strong>Ground Tilemap:</strong> For floor tiles</li>
+                <li><strong>Wall Tilemap:</strong> For wall tiles</li>
+            </ul>
+
+            <h3>Tile Types</h3>
+            <p>The system works with all Unity tile types:</p>
+            <ul>
+                <li><strong>Regular Tiles:</strong> Basic sprites</li>
+                <li><strong>Rule Tiles:</strong> Auto-tiling sprites that change based on neighbors</li>
+                <li><strong>Animated Tiles:</strong> Tiles with animation frames</li>
+                <li><strong>Random Tiles:</strong> Randomly selected variants</li>
+            </ul>
+
+            <h3>Directional Wall System</h3>
+            <p>When "Use Directional Walls" is enabled, you can assign specific wall tiles for different orientations:</p>
+            <ul>
+                <li><strong>Basic Wall Directions:</strong> Top, Bottom, Left, and Right wall tiles</li>
+                <li><strong>Inner Corner Tiles:</strong> Inner Top-Left, Inner Top-Right, Inner Bottom-Left, Inner Bottom-Right</li>
+                <li><strong>Outer Corner Tiles:</strong> Outer Top-Left, Outer Top-Right, Outer Bottom-Left, Outer Bottom-Right</li>
+            </ul>
+
+            <h2 id="entity-placement">6. Entity Placement</h2>
+            <p>PCG Level Master includes a system for automatically placing entities in generated levels:</p>
+
+            <img src="image4.png" alt="Entity placement settings in the inspector" class="responsive-image">
+            <p class="image-caption">Fig 16: Entity placement settings in the inspector</p>
+
+            <h3>Player Placement</h3>
+            <ul>
+                <li>Player is placed in one of the rooms (typically the first room)</li>
+                <li>Positioning ensures the player starts on a valid floor tile</li>
+                <li>Can be customized to start in specific room types in Hybrid or User Defined modes</li>
+            </ul>
+
+            <h3>Enemy Placement</h3>
+            <ul>
+                <li>Enemies are distributed throughout rooms based on the Max Enemies/Room setting</li>
+                <li>Placement algorithm ensures enemies don't overlap or block pathways</li>
+                <li>Enemy density can be customized per room in User Defined Layout</li>
+            </ul>
+
+            <h3>Decoration Placement</h3>
+            <ul>
+                <li>Decorations are placed along walls or in open floor areas depending on the prefab</li>
+                <li>Controlled by the Max Decors/Room setting</li>
+                <li>Can be customized per room in User Defined Layout</li>
+            </ul>
+
+            <h2 id="parameter-reference">7. Parameter Reference</h2>
+            <p>This section provides a complete reference of all parameters available in PCG Level Master.</p>
+
+            <h3 id="level-dimensions-seed">7.1. Level Dimensions & Seed</h3>
+            <table class="parameters-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Description</th>
+                        <th>Default</th>
+                        <th>Range</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Level Width</td>
+                        <td>Width of the level grid in tiles</td>
+                        <td>100</td>
+                        <td>20-500</td>
+                    </tr>
+                    <tr>
+                        <td>Level Height</td>
+                        <td>Height of the level grid in tiles</td>
+                        <td>100</td>
+                        <td>20-500</td>
+                    </tr>
+                    <tr>
+                        <td>Use Random Seed</td>
+                        <td>Generate a new random seed each time</td>
+                        <td>Checked</td>
+                        <td>Boolean</td>
+                    </tr>
+                    <tr>
+                        <td>Seed Value</td>
+                        <td>The specific seed value to use</td>
+                        <td>Random</td>
+                        <td>Integer</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 id="bsp-algorithm-settings">7.2. BSP Algorithm Settings</h3>
+            <table class="parameters-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Description</th>
+                        <th>Default</th>
+                        <th>Range</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Min Room Size</td>
+                        <td>Minimum width/height for rooms</td>
+                        <td>8</td>
+                        <td>4-20</td>
+                    </tr>
+                    <tr>
+                        <td>BSP Iterations</td>
+                        <td>Number of BSP splits (controls room count)</td>
+                        <td>5</td>
+                        <td>1-10</td>
+                    </tr>
+                    <tr>
+                        <td>Room Padding</td>
+                        <td>Minimum space between room edge and partition</td>
+                        <td>2</td>
+                        <td>0-10</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 id="hybrid-room-settings">7.3. Hybrid Room Settings</h3>
+            <table class="parameters-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Description</th>
+                        <th>Default</th>
+                        <th>Range</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>L-Shape Chance</td>
+                        <td>Probability of generating L-shaped rooms</td>
+                        <td>0.048</td>
+                        <td>0-1</td>
+                    </tr>
+                    <tr>
+                        <td>Template Chance</td>
+                        <td>Probability of using a room template</td>
+                        <td>0.844</td>
+                        <td>0-1</td>
+                    </tr>
+                    <tr>
+                        <td>Min Leg Ratio</td>
+                        <td>Minimum ratio for L-shaped room legs</td>
+                        <td>0.4</td>
+                        <td>0.1-0.9</td>
+                    </tr>
+                    <tr>
+                        <td>Max Leg Ratio</td>
+                        <td>Maximum ratio for L-shaped room legs</td>
+                        <td>0.7</td>
+                        <td>0.1-0.9</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 id="corridor-settings">7.4. Corridor Settings</h3>
+            <table class="parameters-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Description</th>
+                        <th>Default</th>
+                        <th>Range</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Corridor Width</td>
+                        <td>Width of corridors in tiles</td>
+                        <td>2</td>
+                        <td>1-5</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 id="entities-decorations">7.5. Entities & Decorations</h3>
+            <table class="parameters-table">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Description</th>
+                        <th>Default</th>
+                        <th>Range</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Max Enemies/Room</td>
+                        <td>Maximum number of enemies per room</td>
+                        <td>2</td>
+                        <td>0-10</td>
+                    </tr>
+                    <tr>
+                        <td>Max Decors/Room</td>
+                        <td>Maximum number of decorations per room</td>
+                        <td>3</td>
+                        <td>0-20</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 id="visual-level-designer">8. Visual Level Designer</h2>
+            <p>The Visual Level Designer is a powerful tool that allows you to create custom level layouts visually. It's used primarily with the User Defined Layout generation method.</p>
+
+            <h3 id="designer-interface">8.1. Designer Interface</h3>
+            <p>The Visual Level Designer interface consists of:</p>
+            <ul>
+                <li><strong>Toolbar:</strong> Contains buttons for file operations, view controls, and settings</li>
+                <li><strong>Canvas:</strong> The main design area where rooms are placed and connected</li>
+                <li><strong>Properties Panel:</strong> Displays and allows editing of selected room or connection properties</li>
+                <li><strong>Creation Panel:</strong> Tools for creating new rooms of different types</li>
+            </ul>
+
+            <h3 id="creating-rooms">8.2. Creating Rooms</h3>
+            <p>To create rooms in the Visual Level Designer:</p>
+            <ol class="steps">
+                <li>Right-click in the canvas area and select a room type from the context menu (Rect Room, L-Shape Room, or Template Room)</li>
+                <li>Configure the room properties in the right panel:
+                    <ul>
+                        <li><strong>Name:</strong> A descriptive name for the room</li>
+                        <li><strong>Size:</strong> The logical size of the room in grid units</li>
+                        <li><strong>Template:</strong> (For Template rooms) The prefab to use as a template</li>
+                    </ul>
+                </li>
+                <li>Position the room by dragging it in the canvas</li>
+                <li>Repeat to create additional rooms</li>
+            </ol>
+
+            <p>Alternatively, you can use the "Create Room" panel on the right side of the Visual Level Designer to set up a room's properties before creating it.</p>
+
+            <h3 id="connecting-rooms">8.3. Connecting Rooms</h3>
+            <p>To connect rooms in the Visual Level Designer:</p>
+            <ol class="steps">
+                <li>Select a room by clicking on it</li>
+                <li>Click the "Connect" button in the room or in the properties panel</li>
+                <li>Click on another room to establish a connection</li>
+                <li>Repeat for all rooms in your layout</li>
+            </ol>
+
+            <p>You can edit or delete connections by right-clicking on them.</p>
+
+            <div class="warning">
+                <p>Make sure all rooms are connected to at least one other room. Isolated rooms will not be included in the generated level.</p>
+            </div>
+
+            <h3 id="keyboard-shortcuts">8.4. Keyboard Shortcuts</h3>
+            <table class="parameters-table">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>F</td>
+                        <td>Center view on all nodes</td>
+                    </tr>
+                    <tr>
+                        <td>O</td>
+                        <td>Focus on origin (0,0)</td>
+                    </tr>
+                    <tr>
+                        <td>Delete / Backspace</td>
+                        <td>Delete selected room or connection</td>
+                    </tr>
+                    <tr>
+                        <td>Ctrl + S</td>
+                        <td>Save current layout</td>
+                    </tr>
+                    <tr>
+                        <td>Ctrl + Shift + S</td>
+                        <td>Save layout as...</td>
+                    </tr>
+                    <tr>
+                        <td>Ctrl + O</td>
+                        <td>Open layout</td>
+                    </tr>
+                    <tr>
+                        <td>Ctrl + N</td>
+                        <td>New layout</td>
+                    </tr>
+                    <tr>
+                        <td>Esc</td>
+                        <td>Cancel connection mode or deselect</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2 id="creating-room-templates">9. Creating Room Templates</h2>
+            <p>Room templates are prefabs containing pre-designed room layouts that can be used in Hybrid Procedural and User Defined Layout generation modes.</p>
+
+            <h3>Requirements</h3>
+            <ul>
+                <li>Room templates must contain a Tilemap component</li>
+                <li>Templates should have clear areas for potential corridor connections</li>
+                <li>Templates should use the same tile assets as the main generator</li>
+            </ul>
+
+            <h3>Creation Process</h3>
+            <ol class="steps">
+                <li>Create a new scene in Unity</li>
+                <li>Add a Grid GameObject with a Tilemap child</li>
+                <li>Design your room layout using the Tile Palette</li>
+                <li>Make sure to define clear room boundaries and proper floor/wall tiles</li>
+                <li>Create a prefab from your Tilemap or its parent Grid by dragging it to the Project window</li>
+                <li>Add your template prefab to the Room Templates List in the HybridLevelGenerator component or use it in the Visual Level Designer</li>
+            </ol>
+
+            <div class="note">
+                <p>You can find example room templates in <code>Assets > PCGLevelGenerator > Prefabs > Room Templates</code> to use as references.</p>
+            </div>
+
+            <h2 id="troubleshooting">10. Troubleshooting</h2>
+
+            <h3 id="common-issues">10.1. Common Issues</h3>
+
+            <div class="card">
+                <h4 class="card-title">No Level Generated After Clicking "Generate Level"</h4>
+                <p><strong>Issue:</strong> Clicking "Generate Level" doesn't produce any visible results.</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                    <li>Check that you clicked "Initialize Assets" first</li>
+                    <li>Verify that Ground Tilemap and Wall Tilemap are properly assigned</li>
+                    <li>Ensure Floor Tile and Wall Tile references are set</li>
+                    <li>Check the Console for any error messages</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h4 class="card-title">Rooms Are Too Small or Too Large</h4>
+                <p><strong>Issue:</strong> Generated rooms don't match desired size.</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                    <li>Adjust Min Room Size parameter (higher for larger rooms)</li>
+                    <li>Modify BSP Iterations (lower for larger rooms)</li>
+                    <li>Change Room Padding (lower for larger rooms)</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h4 class="card-title">Corridors Are Missing or Disconnected</h4>
+                <p><strong>Issue:</strong> Some rooms appear disconnected without corridors.</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                    <li>Ensure Corridor Width is at least 1</li>
+                    <li>In User Defined Layout, verify all rooms are connected in the Visual Designer</li>
+                    <li>Try regenerating with a different seed</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h4 class="card-title">Room Templates Not Appearing in Hybrid Mode</h4>
+                <p><strong>Issue:</strong> Custom room templates aren't being used in generation.</p>
+                <p><strong>Solution:</strong></p>
+                <ul>
+                    <li>Check that templates are properly added to the Room Templates List</li>
+                    <li>Verify Template Chance is set high enough (0.5 or higher)</li>
+                    <li>Ensure templates have valid entrance/exit points</li>
+                </ul>
+            </div>
+
+            <h3 id="performance-considerations">10.2. Performance Considerations</h3>
+            <ul>
+                <li>Very large levels (>200x200) may take longer to generate</li>
+                <li>High BSP Iteration values (>7) will create more rooms and may impact performance</li>
+                <li>Consider using Rule Tiles for walls instead of individual directional tiles for better performance</li>
+                <li>For runtime generation, consider generating levels in a background thread</li>
+            </ul>
+
+            <h2 id="support">11. Support</h2>
+            <p>If you encounter any issues or have questions not covered in this documentation, please reach out:</p>
+
+            <h3>Contact Information</h3>
+            <ul>
+                <li><strong>Email:</strong> <a href="mailto:support@pcglevelmaster.com">support@pcglevelmaster.com</a></li>
+                <li><strong>Discord:</strong> Join our community at <a href="https://discord.gg/pcglevelmaster" target="_blank">PCG Level Master Discord</a></li>
+                <li><strong>Asset Store Comments:</strong> Leave a comment on our Unity Asset Store page</li>
+            </ul>
+
+            <div class="note">
+                <p>This documentation can be found in your project at:<br>
+                <code>Assets/PCGLevelGenerator/Documentation/Documentation.html</code></p>
+            </div>
+
+            <h3>Updating PCG Level Master</h3>
+            <p>We regularly release updates with new features, improvements, and bug fixes. To ensure you have the latest version:</p>
+            <ul>
+                <li>Check the Unity Asset Store for updates</li>
+                <li>Import any new versions using the Package Manager</li>
+                <li>Review the changelog for details on what's changed</li>
+            </ul>
+
+            <h3>Feature Requests</h3>
+            <p>Have an idea for improving PCG Level Master? We'd love to hear it! Send your feature requests to:</p>
+            <ul>
+                <li>Email: <a href="mailto:features@pcglevelmaster.com">features@pcglevelmaster.com</a></li>
+                <li>Discord: #feature-requests channel</li>
+            </ul>
+
+            <div class="divider"></div>
+
+            <div class="footer">
+                <p><strong>PCG Level Master</strong><br>
+                Hybrid PCG Solution for Game Developers<br>
+                Version 1.0.0</p>
+                <p>Copyright © 2025 Dineshkumar, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan<br>
+                All rights reserved.</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Mobile sidebar toggle
+            const sidebarToggle = document.getElementById('mobileSidebarToggle');
+            const sidebar = document.getElementById('sidebar');
+            
+            if (sidebarToggle && sidebar) {
+                sidebarToggle.addEventListener('click', function() {
+                    sidebar.classList.toggle('active');
+                });
+            }
+
+            // Active link handling
+            const navLinks = document.querySelectorAll('#navList a');
+            const sections = document.querySelectorAll('main h1, main h2, main h3');
+            
+            function setActiveLink() {
+                let currentSection = '';
+                
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    
+                    if (window.scrollY >= sectionTop - 100) {
+                        currentSection = section.getAttribute('id');
+                    }
+                });
+                
+                navLinks.forEach(link => {
+                    link.classList.remove('active');
+                    
+                    if (link.getAttribute('href') === '#' + currentSection) {
+                        link.classList.add('active');
+                        
+                        // If it's in a subnav, also highlight the parent
+                        const parentLi = link.closest('.subnav-list')?.parentElement;
+                        if (parentLi) {
+                            const parentLink = parentLi.querySelector('a');
+                            if (parentLink) {
+                                parentLink.classList.add('active');
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Initial call
+            setActiveLink();
+            
+            // Set active link on scroll
+            window.addEventListener('scroll', setActiveLink);
+        });

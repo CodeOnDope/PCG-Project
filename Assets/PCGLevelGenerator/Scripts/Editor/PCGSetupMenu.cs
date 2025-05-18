@@ -659,5 +659,12 @@ namespace PCGLevelGenerator
         {
             ShowWindow();
         }
+
+        [MenuItem("Tools/PCG Level Master/Documentation")]
+        public static void OpenDocumentation()
+        {
+            string docPath = "Assets/PCGLevelGenerator/Documentation/Documentation.html";
+            Application.OpenURL("file://" + Path.GetFullPath(docPath));
+        }
     }
 }
