@@ -12,7 +12,7 @@ using System.Collections.Generic;
 // ╚═╝      ╚═════╝  ╚═════╝    ╚══════╝╚══════╝  ╚═══╝  ╚══════╝╚══════╝    ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝   ╚═╝   ╚══════╝╚═╝  ╚═╝ 
 //
 // PCG Level Generator for Unity
-// Copyright © 2025 Dineshkumar, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan
+// Copyright © 2025 Dineshkumar Rajendran, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan Sundararajan
 // Version: 1.0.0
 
 namespace PCGLevelGenerator
@@ -596,7 +596,7 @@ namespace PCGLevelGenerator
             if (headerTexture == null)
             {
                 headerTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(
-                    "Assets/PCGLevelGenerator/Editor/Resources/PCGHeader.png");
+                    "Assets/PCGLevelGenerator/Editor/Resources/PCGLevelMaster.png");
             }
 
             // Simple layout using EditorGUILayout
@@ -609,7 +609,7 @@ namespace PCGLevelGenerator
             // Title
             GUILayout.Label("PCG Level Master", EditorStyles.boldLabel);
 
-            GUILayout.Label("Developed by Dineshkumar, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan", EditorStyles.centeredGreyMiniLabel);
+            GUILayout.Label("Developed by Dineshkumar Rajendran, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan", EditorStyles.centeredGreyMiniLabel);
             GUILayout.Space(10);
             EditorGUILayout.EndVertical();
 
@@ -646,7 +646,7 @@ namespace PCGLevelGenerator
             // Footer
             GUILayout.Label("You can access these tools anytime via the Tools > PCG Level Master menu",
                 EditorStyles.centeredGreyMiniLabel);
-            GUILayout.Label("Copyright © 2025 Dineshkumar, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan. All rights reserved.",
+            GUILayout.Label("Copyright © 2025 Dineshkumar Rajendran, Mahmud Hasan, Kevin A. Moberly, & Kamalanathan. All rights reserved.",
                 EditorStyles.centeredGreyMiniLabel);
 
             GUILayout.Space(10);
